@@ -28,8 +28,12 @@ class Cliflow < Formula
     libexec.install "build"
     libexec.install "package.json"
     
-    # Install shell integration files to share
-    (share/"cliflow/shell-integration").install Dir["shell-integration/*"]
+    # Install shell integration files to share - install each file explicitly
+    shell_dir = share/"cliflow/shell-integration"
+    shell_dir.mkpath
+    shell_dir.install "shell-integration/cliflow.zsh"
+    shell_dir.install "shell-integration/cliflow.bash"
+    shell_dir.install "shell-integration/cliflow.fish"
     
     # Create main CLI wrapper
     (bin/"cliflow").write <<~EOS
@@ -46,10 +50,10 @@ class Cliflow < Formula
     EOS
 
     # Install zsh completions
-    zsh_completion.install share/"cliflow/shell-integration/cliflow.zsh" => "_cliflow"
+    zsh_completion.install shell_dir/"cliflow.zsh" => "_cliflow"
     
     # Install bash completions  
-    bash_completion.install share/"cliflow/shell-integration/cliflow.bash" => "cliflow"
+    bash_completion.install shell_dir/"cliflow.bash" => "cliflow"
   end
 
   def post_install
