@@ -1,0 +1,28 @@
+// mkfifo completion spec for CLIFlow
+// Auto-converted from Fig.io spec: https://github.com/withfig/autocomplete
+// License: MIT
+
+import { CompletionSpec, Subcommand, Option, Suggestion } from '../types.js';
+
+const completionSpec= {
+  name: "mkfifo",
+  description: "Make FIFOs (first-in, first-out)",
+  options: [
+    {
+      name: "-m",
+      description:
+        "Set the file permission bits of newly-created fifos to mode, without respect to the current umask; the mode is specified as in chmod(1)",
+      args: {
+        name: "MODE",
+        suggestions: [{ name: "0666" }, { name: "0644" }, { name: "0444" }],
+        default: "0666"
+      }
+    }
+  ],
+  args: {
+    name: "FIFO",
+    description: "FIFO(s) to create",
+    isVariadic: true
+  }
+};
+export default completionSpec;

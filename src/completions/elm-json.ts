@@ -1,0 +1,186 @@
+// elm-json completion spec for CLIFlow
+// Auto-converted from Fig.io spec: https://github.com/withfig/autocomplete
+// License: MIT
+
+import { CompletionSpec, Subcommand, Option, Suggestion } from '../types.js';
+
+
+/**
+ * Based on [elm-json](https://github.com/zwilias/elm-json), version 0.2.13. Cli tool for working with your elm.json file.
+ */
+const completionSpec = {
+  name: "elm-json",
+  description: "Deal with your elm.json",
+  subcommands: [
+    {
+      name: "help",
+      description:
+        "Prints help information or the help of the given subcommand(s)",
+      args: {
+        name: "subcommand",
+        template: "help"
+      }
+    },
+    {
+      name: "install",
+      description: "Install a package",
+      options: [
+        {
+          name: ["--help", "-h"],
+          description: "Prints help information"
+        },
+        {
+          name: "--test",
+          description: "Install as a test-dependency"
+        },
+        {
+          name: ["--version", "-V"],
+          description: "Prints version information"
+        },
+        {
+          name: "--yes",
+          description: 'Answer "yes" to all questions'
+        }
+      ],
+      args: [
+        {
+          name: "PACKAGE",
+          description:
+            "Package to install, e.g. elm/core or elm/core@1.0.2 or elm/core@1",
+          debounce: true
+                  },
+        {
+          name: "-- INPUT",
+          isOptional: true,
+          description: "The elm.json file to upgrade [default: elm.json]",
+          template: "filepaths"
+        }
+      ]
+    },
+    {
+      name: "new",
+      description: "Create a new elm.json file",
+      options: [
+        {
+          name: ["--help", "-h"],
+          description: "Prints help information"
+        },
+        {
+          name: ["--version", "-V"],
+          description: "Prints version information"
+        }
+      ]
+    },
+    {
+      name: "tree",
+      description: "List entire dependency graph as a tree",
+      options: [
+        {
+          name: ["--help", "-h"],
+          description: "Prints help information"
+        },
+        {
+          name: "--test",
+          description: "Promote test-dependencies to top-level dependencies"
+        },
+        {
+          name: ["--version", "-V"],
+          description: "Prints version information"
+        }
+      ],
+      args: [
+        {
+          name: "PACKAGE",
+          description:
+            "Limit output to show path to some (indirect) dependency",
+          debounce: true
+                  },
+        {
+          name: "-- INPUT",
+          isOptional: true,
+          description: "The elm.json file to solve [default: elm.json]",
+          template: "filepaths"
+        }
+      ]
+    },
+    {
+      name: "uninstall",
+      description: "Uninstall a package",
+      options: [
+        {
+          name: ["--help", "-h"],
+          description: "Prints help information"
+        },
+        {
+          name: ["--version", "-V"],
+          description: "Prints version information"
+        },
+        {
+          name: "--yes",
+          description: 'Answer "yes" to all questions'
+        }
+      ],
+      args: [
+        {
+          name: "PACKAGE",
+          description: "Package to uninstall, e.g. elm/html",
+          debounce: true
+                  },
+        {
+          name: "-- INPUT",
+          isOptional: true,
+          description: "The elm.json file to upgrade [default: elm.json]",
+          template: "filepaths"
+        }
+      ]
+    },
+    {
+      name: "upgrade",
+      description: "Bring your dependencies up to date",
+      options: [
+        {
+          name: ["--help", "-h"],
+          description: "Prints help information"
+        },
+        {
+          name: "--unsafe",
+          description: "Allow major versions bumps"
+        },
+        {
+          name: ["--version", "-V"],
+          description: "Prints version information"
+        },
+        {
+          name: "--yes",
+          description: 'Answer "yes" to all questions'
+        }
+      ],
+      args: {
+        name: "INPUT",
+        description: "The elm.json file to upgrade [default: elm.json]",
+        isOptional: true,
+        template: "filepaths"
+      }
+    }
+  ],
+  options: [
+    {
+      name: ["--help", "-h"],
+      description: "Prints help information"
+    },
+    {
+      name: "--offline",
+      description:
+        "Enable offline mode, which means no HTTP traffic will happen"
+    },
+    {
+      name: ["--version", "-V"],
+      description: "Prints version information"
+    },
+    {
+      name: ["--verbose", "-v"],
+      description: "Sets the level of verbosity"
+    }
+  ]
+};
+export default completionSpec;

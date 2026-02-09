@@ -1,0 +1,43 @@
+// xcode-select completion spec for CLIFlow
+// Auto-converted from Fig.io spec: https://github.com/withfig/autocomplete
+// License: MIT
+
+import { CompletionSpec, Subcommand, Option, Suggestion } from '../types.js';
+
+const completionSpec= {
+  name: "xcode-select",
+  description: "Active developer directory for Xcode tools",
+  options: [
+    {
+      name: ["-h", "--help"],
+      description: "Help message"
+    },
+    {
+      name: ["-p", "--print-path"],
+      description: "Display path to active developer directory"
+    },
+    {
+      name: ["-s", "--switch"],
+      description: "Set path to active developer directory",
+      insertValue: "-s ",
+      args: {
+        name: "path",
+        template: "folders"
+      }
+    },
+    {
+      name: "--install",
+      description: "Install Xcode command line tools"
+    },
+    {
+      name: ["-v", "--version"],
+      description: "Display version"
+    },
+    {
+      name: ["-r", "--reset"],
+      description: "Reset to the default CLT path"
+    }
+  ]
+};
+
+export default completionSpec;

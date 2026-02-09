@@ -1,0 +1,15 @@
+// if completion spec for CLIFlow
+// Auto-converted from Fig.io spec: https://github.com/withfig/autocomplete
+// License: MIT
+
+import { CompletionSpec, Subcommand, Option, Suggestion } from '../types.js';
+
+const completionSpec= {
+  name: "if",
+  description: "Conditionally execute based on the return value of a command",
+  args: {
+    isCommand: true
+  }
+};
+
+export default completionSpec;

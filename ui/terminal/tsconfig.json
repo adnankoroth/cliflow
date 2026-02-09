@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "outDir": "../../build/ui/terminal",
+    "rootDir": ".",
+    "declaration": true,
+    "lib": ["ES2022"]
+  },
+  "include": ["*.tsx", "*.ts"],
+  "exclude": ["node_modules"]
+}

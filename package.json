@@ -1,0 +1,69 @@
+{
+  "name": "cliflow",
+  "version": "1.0.0",
+  "description": "IDE-style terminal autocompletion for 800+ CLI tools. Privacy-first, offline, open-source alternative to Fig.io",
+  "main": "./build/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adnankoroth/cliflow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/adnankoroth/cliflow/issues"
+  },
+  "homepage": "https://github.com/adnankoroth/cliflow#readme",
+  "scripts": {
+    "build": "tsc && npm run build:daemon && npm run build:cli && npm run sanitize:community",
+    "build:daemon": "tsc -p daemon/tsconfig.json || true",
+    "build:cli": "tsc -p bin/tsconfig.json || true",
+    "sanitize:community": "node scripts/sanitize-community-specs.mjs",
+    "report:community": "node scripts/sanitize-community-specs.mjs --report-only --sample 200",
+    "build:standalone": "node scripts/build-standalone.mjs",
+    "build:pkg": "bash scripts/build-macos-pkg.sh",
+    "start": "node build/bin/cliflow.js daemon start",
+    "daemon": "node build/daemon/server.js start",
+    "test": "node build/bin/cliflow.js test",
+    "repair": "node build/bin/cliflow.js repair --fix",
+    "clean": "rm -rf build dist releases && echo 'Build cleaned'",
+    "release": "bash scripts/release.sh",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "autocomplete",
+    "terminal",
+    "shell",
+    "completion",
+    "cli",
+    "fig-alternative",
+    "zsh",
+    "bash",
+    "fish",
+    "productivity",
+    "devtools"
+  ],
+  "author": "CLIFlow Contributors",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "ink": "^4.4.1",
+    "react": "^18.3.1",
+    "strip-json-comments": "^5.0.1",
+    "yaml": "^2.4.5"
+  },
+  "bin": {
+    "cliflow": "./build/bin/cliflow.js"
+  },
+  "files": [
+    "build/**/*",
+    "shell-integration/**/*"
+  ]
+}

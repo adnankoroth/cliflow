@@ -1,0 +1,55 @@
+name: Community Specs Report
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/sanitize-community-specs.mjs'
+      - 'scripts/convert-fig-spec*.mjs'
+      - 'scripts/convert-fig-specs.mjs'
+      - 'scripts/merge-fig-spec*.mjs'
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - '.github/workflows/community-specs-report.yml'
+  pull_request:
+    paths:
+      - 'scripts/sanitize-community-specs.mjs'
+      - 'scripts/convert-fig-spec*.mjs'
+      - 'scripts/convert-fig-specs.mjs'
+      - 'scripts/merge-fig-spec*.mjs'
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - '.github/workflows/community-specs-report.yml'
+
+concurrency:
+  group: community-specs-report-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (includes sanitize step)
+        run: npm run build
+
+      - name: Community spec import report (non-blocking)
+        continue-on-error: true
+        run: node scripts/sanitize-community-specs.mjs --report-only --all --exit-code --github-annotations

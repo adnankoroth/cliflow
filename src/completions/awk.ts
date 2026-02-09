@@ -1,0 +1,83 @@
+// AWK - Pattern scanning and text processing language
+import { CompletionSpec, Suggestion } from '../types.js';
+
+export const awkSpec: CompletionSpec = {
+  name: 'awk',
+  description: 'Pattern-directed scanning and processing language',
+  options: [
+    {
+      name: ['-F', '--field-separator'],
+      description: 'Set the field separator',
+      args: { name: 'separator', description: 'Field separator character' },
+    },
+    {
+      name: ['-v', '--assign'],
+      description: 'Assign a value to a variable before execution',
+      args: { name: 'var=value', description: 'Variable assignment' },
+    },
+    {
+      name: ['-f', '--file'],
+      description: 'Read the AWK program from a file',
+      args: { name: 'progfile', description: 'AWK program file', template: 'filepaths' },
+    },
+    {
+      name: ['-W', '--compat'],
+      description: 'Run in compatibility mode',
+      args: {
+        name: 'option',
+        suggestions: [
+          { name: 'compat', description: 'Run in compatibility mode' },
+          { name: 'lint', description: 'Warn about dubious constructs' },
+          { name: 'lint-old', description: 'Warn about non-portable constructs' },
+          { name: 'posix', description: 'Run in strict POSIX mode' },
+          { name: 're-interval', description: 'Allow interval expressions' },
+          { name: 'traditional', description: 'Run in traditional mode' },
+        ],
+      },
+    },
+    { name: '--posix', description: 'Operate in strict POSIX mode' },
+    { name: '--traditional', description: 'Use traditional Unix awk behavior' },
+    { name: '--lint', description: 'Warn about dubious constructs' },
+    { name: '--lint-old', description: 'Warn about non-portable constructs' },
+    { name: '-b', description: 'Use binary mode for I/O' },
+    { name: '-c', description: 'Run in compatibility mode' },
+    { name: '-C', description: 'Enable lint warnings for non-POSIX extensions' },
+    { name: '-d', description: 'Dump variables to awkvars.out' },
+    { name: '-D', description: 'Enable debugging mode' },
+    { name: '-e', description: 'Specify AWK program text', args: { name: 'program' } },
+    { name: '-E', description: 'Read AWK source from file, disabling command line programs', args: { name: 'file', template: 'filepaths' } },
+    { name: '-g', description: 'Enable GNU extensions' },
+    { name: '-h', description: 'Print a short summary of options' },
+    { name: '-i', description: 'Include AWK source library', args: { name: 'file', template: 'filepaths' } },
+    { name: '-l', description: 'Load a dynamic extension', args: { name: 'lib' } },
+    { name: '-L', description: 'Provide lint warnings' },
+    { name: '-M', description: 'Use arbitrary precision arithmetic' },
+    { name: '-n', description: 'Disable automatic input read' },
+    { name: '-N', description: 'Use LC_NUMERIC for number parsing' },
+    { name: '-o', description: 'Pretty-print the program to file', args: { name: 'file', template: 'filepaths' } },
+    { name: '-O', description: 'Enable optimizations' },
+    { name: '-p', description: 'Profile the program', args: { name: 'file', template: 'filepaths', isOptional: true } },
+    { name: '-P', description: 'Run in POSIX mode' },
+    { name: '-r', description: 'Enable extended regular expressions' },
+    { name: '-s', description: 'Enable sandbox mode' },
+    { name: '-S', description: 'Enable sandbox mode (stricter)' },
+    { name: '-t', description: 'Enable timing statistics' },
+    { name: '-V', description: 'Print version information' },
+    { name: '--help', description: 'Display help information' },
+    { name: '--version', description: 'Print version information' },
+  ],
+  args: [
+    {
+      name: 'program',
+      description: 'AWK program (if -f not used)',
+      isOptional: true,
+    },
+    {
+      name: 'file',
+      description: 'Input files to process',
+      template: 'filepaths',
+      isVariadic: true,
+      isOptional: true,
+    },
+  ],
+};

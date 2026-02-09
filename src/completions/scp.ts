@@ -1,0 +1,52 @@
+// SCP - Secure copy (remote file copy)
+import { CompletionSpec, Suggestion } from '../types.js';
+
+export const scpSpec: CompletionSpec = {
+  name: 'scp',
+  description: 'Secure copy (remote file copy program)',
+  options: [
+    { name: '-3', description: 'Copy through local host' },
+    { name: '-4', description: 'Use IPv4 only' },
+    { name: '-6', description: 'Use IPv6 only' },
+    { name: '-A', description: 'Enable agent forwarding' },
+    { name: '-B', description: 'Batch mode' },
+    { name: '-C', description: 'Enable compression' },
+    { name: '-c', description: 'Cipher spec', args: { name: 'cipher', suggestions: [
+      { name: 'aes128-ctr' }, { name: 'aes192-ctr' }, { name: 'aes256-ctr' },
+      { name: 'aes128-gcm@openssh.com' }, { name: 'aes256-gcm@openssh.com' },
+      { name: 'chacha20-poly1305@openssh.com' },
+    ] } },
+    { name: '-D', description: 'Connect to SFTP server directly' },
+    { name: '-F', description: 'SSH config file', args: { name: 'configfile', template: 'filepaths' } },
+    { name: '-i', description: 'Identity file', args: { name: 'identity_file', template: 'filepaths' } },
+    { name: '-J', description: 'Jump host', args: { name: '[user@]host[:port]' } },
+    { name: '-l', description: 'Limit bandwidth (Kbit/s)', args: { name: 'limit' } },
+    { name: '-O', description: 'Use original SCP protocol' },
+    { name: '-o', description: 'SSH option', args: { name: 'option', suggestions: [
+      { name: 'BatchMode=yes' }, { name: 'BatchMode=no' },
+      { name: 'Compression=yes' }, { name: 'Compression=no' },
+      { name: 'ConnectionAttempts=' }, { name: 'ConnectTimeout=' },
+      { name: 'ControlMaster=auto' }, { name: 'ControlMaster=yes' },
+      { name: 'ControlPath=' }, { name: 'ControlPersist=' },
+      { name: 'IdentityFile=' }, { name: 'IdentitiesOnly=yes' },
+      { name: 'LogLevel=QUIET' }, { name: 'LogLevel=ERROR' }, { name: 'LogLevel=INFO' },
+      { name: 'Port=' }, { name: 'ProxyCommand=' }, { name: 'ProxyJump=' },
+      { name: 'StrictHostKeyChecking=yes' }, { name: 'StrictHostKeyChecking=no' },
+      { name: 'User=' }, { name: 'UserKnownHostsFile=' },
+    ] } },
+    { name: '-P', description: 'Port', args: { name: 'port' } },
+    { name: '-p', description: 'Preserve modification times' },
+    { name: '-q', description: 'Quiet mode' },
+    { name: '-R', description: 'Remote to remote copies through local' },
+    { name: '-r', description: 'Recursive copy' },
+    { name: '-S', description: 'SSH program', args: { name: 'program', template: 'filepaths' } },
+    { name: '-s', description: 'Use SFTP protocol' },
+    { name: '-T', description: 'Disable strict filename checking' },
+    { name: '-v', description: 'Verbose mode' },
+    { name: '-X', description: 'SFTP option', args: { name: 'sftp_option' } },
+  ],
+  args: [
+    { name: 'source', description: '[[user@]host:]file', template: 'filepaths' },
+    { name: 'destination', description: '[[user@]host:]file', template: 'filepaths' },
+  ],
+};
