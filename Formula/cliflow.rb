@@ -28,12 +28,12 @@ class Cliflow < Formula
     libexec.install "build"
     libexec.install "package.json"
     
-    # Install shell integration files to share - install each file explicitly
+    # Install shell integration files using system cp (workaround for Homebrew filtering)
     shell_dir = share/"cliflow/shell-integration"
     shell_dir.mkpath
-    shell_dir.install "shell-integration/cliflow.zsh"
-    shell_dir.install "shell-integration/cliflow.bash"
-    shell_dir.install "shell-integration/cliflow.fish"
+    system "cp", "-v", "shell-integration/cliflow.zsh", shell_dir
+    system "cp", "-v", "shell-integration/cliflow.bash", shell_dir
+    system "cp", "-v", "shell-integration/cliflow.fish", shell_dir
     
     # Create main CLI wrapper
     (bin/"cliflow").write <<~EOS
