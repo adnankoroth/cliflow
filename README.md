@@ -18,6 +18,36 @@
 | Single binary install | No npm runtime needed |
 | 800+ command specs | No AI/ML features |
 
+## How CLIFlow Compares
+
+| Feature | CLIFlow | Fig / Amazon Q | zsh-autosuggestions | bash-completion |
+|---------|---------|----------------|---------------------|-----------------|
+| **Offline** | ✅ 100% | ❌ Cloud-based | ✅ Yes | ✅ Yes |
+| **Privacy** | ✅ Zero telemetry | ❌ Telemetry | ✅ Yes | ✅ Yes |
+| **Open Source** | ✅ MIT | ❌ Proprietary | ✅ Yes | ✅ Yes |
+| **Rich Completions** | ✅ 800+ specs | ✅ Yes | ❌ History only | ⚠️ Basic |
+| **Subcommand Args** | ✅ Full support | ✅ Yes | ❌ No | ⚠️ Limited |
+| **Cross-shell** | ✅ zsh/bash/fish | ✅ Yes | ❌ zsh only | ❌ bash only |
+| **No Account** | ✅ Yes | ❌ Required | ✅ Yes | ✅ Yes |
+| **IDE-style UI** | ✅ Yes | ✅ Yes | ❌ No | ❌ No |
+
+**Why not Fig / Amazon Q?**
+- Acquired by Amazon, now requires AWS account
+- Cloud-based with telemetry
+- Not suitable for air-gapped or high-security environments
+
+**Why not zsh-autosuggestions?**
+- Only suggests from command history
+- No intelligent argument/flag completion
+
+**Why not bash-completion?**
+- Basic completions, no descriptions
+- Limited to bash shell
+
+**CLIFlow** gives you the best of all worlds: rich IDE-style completions like Fig, but fully offline and open-source like traditional tools.
+
+> 💡 Completion specs powered by the open-source [Fig autocomplete](https://github.com/withfig/autocomplete) project (MIT licensed).
+
 ## Security First
 
 ```
