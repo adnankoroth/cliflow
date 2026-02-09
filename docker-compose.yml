@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+  
+  api:
+    image: node:18-alpine
+    command: npm start
+    
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: secret

@@ -287,3 +287,13 @@ bindkey '^H' cliflow_backward_delete  # Backspace (alternate)
 
 cliflow_enable() { CLIFLOW_ENABLED=1; echo "CLIFlow enabled"; }
 cliflow_disable() { CLIFLOW_ENABLED=0; zle -M ""; echo "CLIFlow disabled"; }
+
+# Auto-start daemon if not running (runs in background, silent)
+if ! cliflow_is_running; then
+  # Ensure ~/.cliflow directory exists
+  [[ ! -d "${HOME}/.cliflow" ]] && mkdir -p "${HOME}/.cliflow"
+  # Start daemon in background if cliflow command exists
+  if command -v cliflow &>/dev/null; then
+    (cliflow daemon start &>/dev/null &)
+  fi
+fi

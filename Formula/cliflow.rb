@@ -56,15 +56,8 @@ class Cliflow < Formula
   end
 
   def post_install
-    # Create CLIFLOW_HOME directory
+    # Note: ~/.cliflow is created automatically by shell integration on first load
     (var/"cliflow").mkpath
-    
-    # Create symlink for shell integration
-    cliflow_home = Pathname.new(ENV["HOME"])/".cliflow"
-    unless cliflow_home.exist?
-      cliflow_home.mkpath
-      (cliflow_home/"shell-integration").make_symlink(share/"cliflow/shell-integration")
-    end
   end
 
   def caveats
