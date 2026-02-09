@@ -6,24 +6,8 @@ on:
       - 'v*'
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-            target: macos-arm64
-            node-target: node20-macos-arm64
-          - os: macos-latest
-            target: macos-x64
-            node-target: node20-macos-x64
-          - os: ubuntu-latest
-            target: linux-x64
-            node-target: node20-linux-x64
-          - os: ubuntu-latest
-            target: linux-arm64
-            node-target: node20-linux-arm64
-
-    runs-on: ${{ matrix.os }}
+  test:
+    runs-on: ubuntu-latest
     
     steps:
       - uses: actions/checkout@v4
@@ -40,67 +24,22 @@ jobs:
       - name: Build
         run: npm run build
       
-      - name: Install pkg
-        run: npm install -g pkg
-      
-      - name: Build standalone binary
+      - name: Verify build
         run: |
-          mkdir -p dist
-          pkg build/bin/cliflow.js \
-            --target ${{ matrix.node-target }} \
-            --output dist/cliflow-${{ matrix.target }} \
-            --compress GZip
-      
-      - name: Package with shell integrations
-        run: |
-          cd dist
-          mkdir -p cliflow-${{ matrix.target }}-bundle
-          cp cliflow-${{ matrix.target }} cliflow-${{ matrix.target }}-bundle/cliflow
-          cp -r ../shell-integration cliflow-${{ matrix.target }}-bundle/
-          cp -r ../build/completions cliflow-${{ matrix.target }}-bundle/
-          tar -czvf cliflow-${{ matrix.target }}.tar.gz cliflow-${{ matrix.target }}-bundle
-          
-      - name: Generate checksum
-        run: |
-          cd dist
-          shasum -a 256 cliflow-${{ matrix.target }}.tar.gz > cliflow-${{ matrix.target }}.tar.gz.sha256
-      
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cliflow-${{ matrix.target }}
-          path: |
-            dist/cliflow-${{ matrix.target }}.tar.gz
-            dist/cliflow-${{ matrix.target }}.tar.gz.sha256
+          test -f build/bin/cliflow.js
+          test -f build/daemon/server.js
+          echo "Build successful"
 
   release:
-    needs: build
+    needs: test
     runs-on: ubuntu-latest
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            artifacts/**/*.tar.gz
-            artifacts/**/*.sha256
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  homebrew:
-    needs: release
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Update Homebrew formula
-        run: |
-          echo "TODO: Auto-update Homebrew tap with new version"
-          # This would update your homebrew-tap repo with the new version
