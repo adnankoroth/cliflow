@@ -187,6 +187,8 @@ cliflow specs community    # List community specs
 ### Community Specs (716)
 `brew`, `apt`, `jq`, `fzf`, `bat`, `rg`, `fd`, `vercel`, `netlify`, `heroku`, and 700+ more.
 
+> 🙏 Community specs sourced from [withfig/autocomplete](https://github.com/withfig/autocomplete) — thanks to Fig and 600+ contributors!
+
 ## Custom Completions
 
 Create specs for your own tools:
