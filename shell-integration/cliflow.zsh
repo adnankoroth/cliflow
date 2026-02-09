@@ -272,14 +272,64 @@ cliflow_complete_widget() {
   zle reset-prompt
 }
 
-# Register the widget
+# Space widget - shows inline ghost completion
+cliflow_space_widget() {
+  # First, insert the space
+  BUFFER+=" "
+  CURSOR=${#BUFFER}
+  
+  # Skip if disabled or daemon not running
+  if [[ "$CLIFLOW_ENABLED" != "1" ]] || ! cliflow_is_running; then
+    zle reset-prompt
+    return
+  fi
+  
+  # Get completions
+  local response=$(cliflow_get_completions "$BUFFER" "$CURSOR")
+  
+  if [[ -z "$response" ]] || [[ "$response" == *'"success":false'* ]]; then
+    zle reset-prompt
+    return
+  fi
+  
+  # Get top suggestion
+  local top_suggestion=$(echo "$response" | grep -oE '"name":"[^"]*"' | head -1 | sed 's/"name":"//;s/"//')
+  
+  if [[ -n "$top_suggestion" ]] && [[ "$top_suggestion" != "$BUFFER"* ]]; then
+    # Store for Right arrow acceptance
+    CLIFLOW_GHOST="$top_suggestion"
+    # Show ghost text using raw ANSI codes (dim gray)
+    POSTDISPLAY=$'\e[90m'"$top_suggestion"$'\e[0m'
+  else
+    POSTDISPLAY=""
+    CLIFLOW_GHOST=""
+  fi
+  
+  zle reset-prompt
+}
+
+# Right arrow accepts ghost completion
+cliflow_accept_ghost() {
+  if [[ -n "$CLIFLOW_GHOST" ]]; then
+    BUFFER="${BUFFER}${CLIFLOW_GHOST} "
+    CURSOR=${#BUFFER}
+    POSTDISPLAY=""
+    CLIFLOW_GHOST=""
+  else
+    zle forward-char
+  fi
+  zle reset-prompt
+}
+
+# Register widgets
 zle -N cliflow_complete_widget
+zle -N cliflow_space_widget
+zle -N cliflow_accept_ghost
 
-# Bind to Tab key
-bindkey '^I' cliflow_complete_widget
-
-# Also provide manual trigger
-bindkey '^@' cliflow_complete_widget  # Ctrl+Space
+# Bind keys
+bindkey '^I' cliflow_complete_widget    # Tab - full fzf menu
+bindkey ' ' cliflow_space_widget        # Space - inline ghost
+bindkey '^[[C' cliflow_accept_ghost     # Right arrow - accept ghost
 
 # Status functions
 cliflow_status() {
