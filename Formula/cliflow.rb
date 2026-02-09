@@ -26,8 +26,10 @@ class Cliflow < Formula
     
     # Install to libexec (keeps node_modules isolated)
     libexec.install "build"
-    libexec.install "shell-integration"
     libexec.install "package.json"
+    
+    # Install shell integration files to share
+    (share/"cliflow").install "shell-integration"
     
     # Create main CLI wrapper
     (bin/"cliflow").write <<~EOS
@@ -43,14 +45,11 @@ class Cliflow < Formula
       exec "#{Formula["node@20"].opt_bin}/node" "#{libexec}/build/daemon/server.js" "$@"
     EOS
 
-    # Install shell integration files to share
-    (share/"cliflow").install "shell-integration"
-    
     # Install zsh completions
-    zsh_completion.install "shell-integration/cliflow.zsh" => "_cliflow"
+    zsh_completion.install "#{share}/cliflow/shell-integration/cliflow.zsh" => "_cliflow"
     
     # Install bash completions  
-    bash_completion.install "shell-integration/cliflow.bash" => "cliflow"
+    bash_completion.install "#{share}/cliflow/shell-integration/cliflow.bash" => "cliflow"
   end
 
   def post_install
