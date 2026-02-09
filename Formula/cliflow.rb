@@ -15,7 +15,7 @@ class Cliflow < Formula
   license "MIT"
   head "https://github.com/adnankoroth/cliflow.git", branch: "main"
 
-  depends_on "node@20"
+  depends_on "node"
 
   def install
     # Install npm dependencies
@@ -28,32 +28,30 @@ class Cliflow < Formula
     libexec.install "build"
     libexec.install "package.json"
     
-    # Install shell integration files using system cp (workaround for Homebrew filtering)
+    # Install shell integration files using system cp
     shell_dir = share/"cliflow/shell-integration"
     shell_dir.mkpath
-    system "cp", "-v", "shell-integration/cliflow.zsh", shell_dir
-    system "cp", "-v", "shell-integration/cliflow.bash", shell_dir
-    system "cp", "-v", "shell-integration/cliflow.fish", shell_dir
+    cp "shell-integration/cliflow.zsh", shell_dir
+    cp "shell-integration/cliflow.bash", shell_dir
+    cp "shell-integration/cliflow.fish", shell_dir
     
     # Create main CLI wrapper
     (bin/"cliflow").write <<~EOS
       #!/bin/bash
       export CLIFLOW_HOME="${CLIFLOW_HOME:-$HOME/.cliflow}"
-      exec "#{Formula["node@20"].opt_bin}/node" "#{libexec}/build/bin/cliflow.js" "$@"
+      exec "#{Formula["node"].opt_bin}/node" "#{libexec}/build/bin/cliflow.js" "$@"
     EOS
 
     # Create daemon wrapper
     (bin/"cliflow-daemon").write <<~EOS
       #!/bin/bash
       export CLIFLOW_HOME="${CLIFLOW_HOME:-$HOME/.cliflow}"
-      exec "#{Formula["node@20"].opt_bin}/node" "#{libexec}/build/daemon/server.js" "$@"
+      exec "#{Formula["node"].opt_bin}/node" "#{libexec}/build/daemon/server.js" "$@"
     EOS
 
-    # Install zsh completions
-    zsh_completion.install shell_dir/"cliflow.zsh" => "_cliflow"
-    
-    # Install bash completions  
-    bash_completion.install shell_dir/"cliflow.bash" => "cliflow"
+    # Install completions (copy from source, not shell_dir, since install moves files)
+    zsh_completion.install "shell-integration/cliflow.zsh" => "_cliflow"
+    bash_completion.install "shell-integration/cliflow.bash" => "cliflow"
   end
 
   def post_install
