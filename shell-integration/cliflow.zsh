@@ -48,10 +48,11 @@ cliflow_request() {
   fi
   
   # Use socat or nc to communicate with Unix socket
+  # Need to keep connection open briefly to receive response
   if command -v socat &>/dev/null; then
-    response=$(echo "$request" | socat - UNIX-CONNECT:"$CLIFLOW_SOCKET" 2>/dev/null)
+    response=$({ echo "$request"; sleep 0.1; } | socat -t 1 - UNIX-CONNECT:"$CLIFLOW_SOCKET" 2>/dev/null)
   elif command -v nc &>/dev/null; then
-    response=$(echo "$request" | nc -U "$CLIFLOW_SOCKET" 2>/dev/null)
+    response=$({ echo "$request"; sleep 0.1; } | nc -U "$CLIFLOW_SOCKET" 2>/dev/null)
   else
     return 1
   fi
@@ -65,10 +66,13 @@ cliflow_get_completions() {
   local cursor="$2"
   local cwd="$PWD"
   
-  local request=$(cat <<EOF
-{"type":"complete","commandLine":"${buffer//\"/\\\"}","cursorPosition":$cursor,"cwd":"${cwd//\"/\\\"}","shell":"zsh"}
-EOF
-)
+  # Escape special characters for JSON
+  local escaped_buffer="${buffer//\\/\\\\}"  # Escape backslashes first
+  escaped_buffer="${escaped_buffer//\"/\\\"}"  # Escape quotes
+  local escaped_cwd="${cwd//\\/\\\\}"
+  escaped_cwd="${escaped_cwd//\"/\\\"}"
+  
+  local request="{\"type\":\"complete\",\"commandLine\":\"${escaped_buffer}\",\"cursorPosition\":${cursor},\"cwd\":\"${escaped_cwd}\",\"shell\":\"zsh\"}"
   
   cliflow_request "$request"
 }
