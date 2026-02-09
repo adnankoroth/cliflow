@@ -3,7 +3,9 @@
 # Live completions using zsh's built-in message display
 
 CLIFLOW_SOCKET="${HOME}/.cliflow/cliflow.sock"
-CLIFLOW_CLIENT="${HOME}/.cliflow/client.mjs"
+# Find client.mjs relative to this script (works for Homebrew and local installs)
+CLIFLOW_SCRIPT_DIR="${${(%):-%x}:A:h}"
+CLIFLOW_CLIENT="${CLIFLOW_CLIENT:-${CLIFLOW_SCRIPT_DIR}/client.mjs}"
 CLIFLOW_ENABLED=1
 CLIFLOW_MIN_CHARS=1
 CLIFLOW_LAST_QUERY=""

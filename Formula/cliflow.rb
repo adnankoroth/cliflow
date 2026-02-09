@@ -34,6 +34,7 @@ class Cliflow < Formula
     cp "shell-integration/cliflow.zsh", shell_dir
     cp "shell-integration/cliflow.bash", shell_dir
     cp "shell-integration/cliflow.fish", shell_dir
+    cp "shell-integration/client.mjs", shell_dir
     
     # Create main CLI wrapper
     (bin/"cliflow").write <<~EOS
