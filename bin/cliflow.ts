@@ -159,14 +159,27 @@ async function setup() {
   
   // Check if already configured
   const rcContent = existsSync(rcFile) ? readFileSync(rcFile, 'utf-8') : '';
-  
-  if (rcContent.includes('cliflow')) {
+  const desiredSourceLine = `source "${sourcePath}"`;
+  const existingSourceRegex = /^\s*source\s+["']?[^"']*cliflow\.(zsh|bash|fish)["']?\s*$/m;
+
+  if (rcContent.includes(desiredSourceLine)) {
     log.info('CLIFlow already configured in your shell RC file');
+  } else if (existingSourceRegex.test(rcContent)) {
+    const updatedRc = rcContent.replace(existingSourceRegex, desiredSourceLine);
+    writeFileSync(rcFile, updatedRc);
+    log.success(`Updated CLIFlow source path in ${rcFile}`);
+  } else if (rcContent.includes('# CLIFlow - IDE-like autocomplete')) {
+    const updatedRc = rcContent.replace(
+      /# CLIFlow - IDE-like autocomplete\s*\n?/,
+      `# CLIFlow - IDE-like autocomplete\n${desiredSourceLine}\n`
+    );
+    writeFileSync(rcFile, updatedRc);
+    log.success(`Added CLIFlow source line to ${rcFile}`);
   } else {
     // Add to RC file
     const addition = `
 # CLIFlow - IDE-like autocomplete
-source "${sourcePath}"
+${desiredSourceLine}
 `;
     writeFileSync(rcFile, rcContent + addition);
     log.success(`Added CLIFlow to ${rcFile}`);
