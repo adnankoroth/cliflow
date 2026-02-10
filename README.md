@@ -146,6 +146,8 @@ source ~/.zshrc  # or restart terminal
 cliflow daemon start
 ```
 
+**Important:** You must run `cliflow setup` once after install to enable shell integration.
+
 ### Verify Installation
 ```bash
 cliflow status        # Check everything is working
