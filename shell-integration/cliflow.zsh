@@ -18,7 +18,7 @@ CLIFLOW_ICONS=()
 CLIFLOW_SELECTED=0
 
 cliflow_ignored_keymap() {
-  [[ "$KEYMAP" == "isearch" || "$KEYMAP" == "vicmd" || "$KEYMAP" == "menuselect" ]]
+  [[ "$ZLE_STATE" == *"isearch"* || "$KEYMAP" == "isearch" || "$KEYMAP" == "vicmd" || "$KEYMAP" == "menuselect" ]]
 }
 
 cliflow_is_running() {
