@@ -94,20 +94,13 @@ function isDaemonRunning(): boolean {
   return existsSync(SOCKET_PATH);
 }
 
-async function setup() {
-  log.info('Setting up CLIFlow...');
-  ensureConfigDir();
-  
-  // Detect shell
+function getShellConfig() {
   const shell = process.env.SHELL || '/bin/zsh';
-  const shellName = shell.split('/').pop();
-  
-  log.info(`Detected shell: ${shellName}`);
-  
-  // Determine RC file
-  let rcFile: string;
-  let integrationFile: string;
-  
+  const shellName = shell.split('/').pop() || 'zsh';
+
+  let rcFile = '';
+  let integrationFile = '';
+
   switch (shellName) {
     case 'zsh':
       rcFile = join(homedir(), '.zshrc');
@@ -122,9 +115,39 @@ async function setup() {
       integrationFile = 'cliflow.fish';
       break;
     default:
-      log.error(`Unsupported shell: ${shellName}`);
-      log.info('Supported shells: zsh, bash, fish');
-      return;
+      rcFile = join(homedir(), '.zshrc');
+      integrationFile = 'cliflow.zsh';
+      break;
+  }
+
+  return { shellName, rcFile, integrationFile };
+}
+
+function getDesiredSourcePath(integrationFile: string) {
+  const homebrewIntegration = `/opt/homebrew/opt/cliflow/share/cliflow/shell-integration/${integrationFile}`;
+  const destIntegration = join(CONFIG_DIR, integrationFile);
+
+  if (existsSync(homebrewIntegration)) {
+    return homebrewIntegration;
+  }
+
+  return destIntegration;
+}
+
+async function setup() {
+  log.info('Setting up CLIFlow...');
+  ensureConfigDir();
+  
+  // Detect shell
+  const { shellName, rcFile, integrationFile } = getShellConfig();
+  
+  log.info(`Detected shell: ${shellName}`);
+  
+  // Determine RC file
+  if (!['zsh', 'bash', 'fish'].includes(shellName)) {
+    log.error(`Unsupported shell: ${shellName}`);
+    log.info('Supported shells: zsh, bash, fish');
+    return;
   }
   
   // Copy shell integration file
@@ -291,8 +314,25 @@ function showStatus() {
   console.log(`  Config:        ${CONFIG_DIR}`);
   
   // Shell integration
-  const shell = process.env.SHELL?.split('/').pop() || 'unknown';
-  console.log(`  Shell:         ${shell}`);
+  const { shellName, rcFile, integrationFile } = getShellConfig();
+  console.log(`  Shell:         ${shellName}`);
+  const desiredSourcePath = getDesiredSourcePath(integrationFile);
+  const desiredSourceLine = `source "${desiredSourcePath}"`;
+  let rcConfigured = false;
+  let rcHasAnyCliflowSource = false;
+  if (existsSync(rcFile)) {
+    const rcContent = readFileSync(rcFile, 'utf-8');
+    const existingSourceRegex = /^\s*source\s+["']?[^"']*cliflow\.(zsh|bash|fish)["']?\s*$/m;
+    rcHasAnyCliflowSource = existingSourceRegex.test(rcContent);
+    rcConfigured = rcContent.includes(desiredSourceLine);
+  }
+  if (rcConfigured) {
+    console.log(`  Shell setup:   ${colors.green}● Configured${colors.reset}`);
+  } else if (rcHasAnyCliflowSource) {
+    console.log(`  Shell setup:   ${colors.yellow}● Needs update${colors.reset}`);
+  } else {
+    console.log(`  Shell setup:   ${colors.yellow}● Not configured${colors.reset}`);
+  }
   
   // Specs count - read from completions directory
   const specsPath = join(__dirname, '..', 'completions');
@@ -371,48 +411,35 @@ async function repair(autoFix: boolean = false) {
   });
   
   // Check 4: Shell integration
-  const shell = process.env.SHELL?.split('/').pop() || 'zsh';
-  let integrationPath = '';
-  switch (shell) {
-    case 'zsh':
-      integrationPath = join(__dirname, '..', 'shell-integration', 'cliflow.zsh');
-      break;
-    case 'bash':
-      integrationPath = join(__dirname, '..', 'shell-integration', 'cliflow.bash');
-      break;
-    case 'fish':
-      integrationPath = join(__dirname, '..', 'shell-integration', 'cliflow.fish');
-      break;
-  }
-  const integrationExists = existsSync(integrationPath);
+  const { shellName, rcFile, integrationFile } = getShellConfig();
+  const homebrewIntegration = `/opt/homebrew/opt/cliflow/share/cliflow/shell-integration/${integrationFile}`;
+  const localIntegration = join(__dirname, '..', 'shell-integration', integrationFile);
+  const integrationExists = existsSync(homebrewIntegration) || existsSync(localIntegration);
   checks.push({
     name: 'Shell Integration',
     status: integrationExists ? 'pass' : 'fail',
-    message: integrationExists ? `${shell} integration found` : `${shell} integration missing`
+    message: integrationExists ? `${shellName} integration found` : `${shellName} integration missing`
   });
   
   // Check 5: RC file setup
-  let rcFile = '';
-  switch (shell) {
-    case 'zsh':
-      rcFile = join(homedir(), '.zshrc');
-      break;
-    case 'bash':
-      rcFile = join(homedir(), '.bashrc');
-      break;
-    case 'fish':
-      rcFile = join(homedir(), '.config', 'fish', 'config.fish');
-      break;
-  }
   let rcConfigured = false;
+  let rcHasAnyCliflowSource = false;
+  const desiredSourcePath = getDesiredSourcePath(integrationFile);
+  const desiredSourceLine = `source "${desiredSourcePath}"`;
   if (existsSync(rcFile)) {
     const rcContent = readFileSync(rcFile, 'utf-8');
-    rcConfigured = rcContent.includes('cliflow');
+    const existingSourceRegex = /^\s*source\s+["']?[^"']*cliflow\.(zsh|bash|fish)["']?\s*$/m;
+    rcHasAnyCliflowSource = existingSourceRegex.test(rcContent);
+    rcConfigured = rcContent.includes(desiredSourceLine);
   }
   checks.push({
     name: 'RC File',
     status: rcConfigured ? 'pass' : 'warn',
-    message: rcConfigured ? `${rcFile} configured` : `${rcFile} not configured for CLIFlow`,
+    message: rcConfigured
+      ? `${rcFile} configured`
+      : rcHasAnyCliflowSource
+        ? `${rcFile} points to old path`
+        : `${rcFile} not configured for CLIFlow`,
     fix: () => {
       log.info('Running setup...');
       setup();
