@@ -217,6 +217,15 @@ export const spec = {
 - Zsh, Bash, or Fish shell
 - ~50MB disk space
 
+## Shell Integration Options (Zsh)
+
+You can customize CLIFlow behavior in Zsh by setting these environment variables before sourcing the integration:
+
+- `CLIFLOW_ACCEPT_SPACE=0` — disable accepting completions with Space (Tab only)
+- `CLIFLOW_DEBOUNCE_MS=40` — debounce UI updates in milliseconds (lower = more responsive)
+
+CLIFlow automatically disables its menu during Zsh modes like reverse search (Ctrl+R), vi command mode, and menu selection to avoid accidental inserts.
+
 ## FAQ
 
 **Q: Does CLIFlow require an internet connection?**  
