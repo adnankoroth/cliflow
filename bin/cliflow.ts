@@ -128,19 +128,37 @@ async function setup() {
   }
   
   // Copy shell integration file
+  // First, try to find shell integration in Homebrew location
+  const homebrewIntegration = `/opt/homebrew/opt/cliflow/share/cliflow/shell-integration/${integrationFile}`;
   const sourceIntegration = join(__dirname, '..', 'shell-integration', integrationFile);
   const destIntegration = join(CONFIG_DIR, integrationFile);
   
-  if (existsSync(sourceIntegration)) {
+  // Use Homebrew path if it exists, otherwise use local path
+  let actualSource = '';
+  let sourcePath = '';
+  
+  if (existsSync(homebrewIntegration)) {
+    actualSource = homebrewIntegration;
+    sourcePath = homebrewIntegration;
+  } else if (existsSync(sourceIntegration)) {
+    actualSource = sourceIntegration;
     copyFileSync(sourceIntegration, destIntegration);
+    sourcePath = destIntegration;
     log.success(`Copied shell integration to ${destIntegration}`);
   } else {
     log.warn(`Shell integration file not found: ${sourceIntegration}`);
+    log.warn(`Also not found at: ${homebrewIntegration}`);
+    sourcePath = destIntegration; // Fallback
+  }
+  
+  // For Homebrew, source directly from /opt/homebrew, don't copy
+  if (actualSource === homebrewIntegration) {
+    sourcePath = homebrewIntegration;
+    log.success(`Using Homebrew shell integration: ${sourcePath}`);
   }
   
   // Check if already configured
   const rcContent = existsSync(rcFile) ? readFileSync(rcFile, 'utf-8') : '';
-  const sourceLine = `source "${destIntegration}"`;
   
   if (rcContent.includes('cliflow')) {
     log.info('CLIFlow already configured in your shell RC file');
@@ -148,7 +166,7 @@ async function setup() {
     // Add to RC file
     const addition = `
 # CLIFlow - IDE-like autocomplete
-[ -f "${destIntegration}" ] && source "${destIntegration}"
+source "${sourcePath}"
 `;
     writeFileSync(rcFile, rcContent + addition);
     log.success(`Added CLIFlow to ${rcFile}`);
