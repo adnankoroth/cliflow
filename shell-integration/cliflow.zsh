@@ -74,6 +74,7 @@ cliflow_show_menu() {
 cliflow_update() {
   [[ "$CLIFLOW_ENABLED" != "1" ]] && return
   ! cliflow_is_running && return
+  [[ "$KEYMAP" == "isearch" ]] && { CLIFLOW_NAMES=(); CLIFLOW_INSERT_VALUES=(); CLIFLOW_ICONS=(); CLIFLOW_SELECTED=0; zle -M ""; return; }
   
   local buffer="$BUFFER" cursor="$CURSOR"
   
@@ -135,6 +136,7 @@ cliflow_backward_delete() {
 
 # Accept selection with Tab or Space
 cliflow_accept() {
+  [[ "$KEYMAP" == "isearch" ]] && { zle -M ""; zle "${CLIFLOW_ORIG_TAB:-expand-or-complete}"; return; }
   if [[ ${#CLIFLOW_NAMES[@]} -gt 0 ]]; then
     local idx=$((CLIFLOW_SELECTED + 1))
     local selected="${CLIFLOW_NAMES[$idx]}"
@@ -213,6 +215,10 @@ cliflow_accept() {
 
 # Space key - accept if menu showing, otherwise insert space and update
 cliflow_space() {
+  if [[ "$KEYMAP" == "isearch" ]]; then
+    zle .self-insert
+    return
+  fi
   if [[ ${#CLIFLOW_NAMES[@]} -gt 0 ]]; then
     # Menu showing - accept selection
     cliflow_accept
