@@ -8,11 +8,18 @@ CLIFLOW_SCRIPT_DIR="${${(%):-%x}:A:h}"
 CLIFLOW_CLIENT="${CLIFLOW_CLIENT:-${CLIFLOW_SCRIPT_DIR}/client.mjs}"
 CLIFLOW_ENABLED=1
 CLIFLOW_MIN_CHARS=1
+CLIFLOW_ACCEPT_SPACE=${CLIFLOW_ACCEPT_SPACE:-1}
+CLIFLOW_DEBOUNCE_MS=${CLIFLOW_DEBOUNCE_MS:-40}
 CLIFLOW_LAST_QUERY=""
+CLIFLOW_LAST_UPDATE=0
 CLIFLOW_NAMES=()
 CLIFLOW_INSERT_VALUES=()
 CLIFLOW_ICONS=()
 CLIFLOW_SELECTED=0
+
+cliflow_ignored_keymap() {
+  [[ "$KEYMAP" == "isearch" || "$KEYMAP" == "vicmd" || "$KEYMAP" == "menuselect" ]]
+}
 
 cliflow_is_running() {
   [[ -S "$CLIFLOW_SOCKET" ]]
@@ -74,7 +81,13 @@ cliflow_show_menu() {
 cliflow_update() {
   [[ "$CLIFLOW_ENABLED" != "1" ]] && return
   ! cliflow_is_running && return
-  [[ "$KEYMAP" == "isearch" ]] && { CLIFLOW_NAMES=(); CLIFLOW_INSERT_VALUES=(); CLIFLOW_ICONS=(); CLIFLOW_SELECTED=0; zle -M ""; return; }
+  cliflow_ignored_keymap && { CLIFLOW_NAMES=(); CLIFLOW_INSERT_VALUES=(); CLIFLOW_ICONS=(); CLIFLOW_SELECTED=0; zle -M ""; return; }
+
+  local now_ms=$(( EPOCHREALTIME * 1000 ))
+  if (( now_ms - CLIFLOW_LAST_UPDATE < CLIFLOW_DEBOUNCE_MS )); then
+    return
+  fi
+  CLIFLOW_LAST_UPDATE=$now_ms
   
   local buffer="$BUFFER" cursor="$CURSOR"
   
@@ -136,7 +149,7 @@ cliflow_backward_delete() {
 
 # Accept selection with Tab or Space
 cliflow_accept() {
-  [[ "$KEYMAP" == "isearch" ]] && { zle -M ""; zle "${CLIFLOW_ORIG_TAB:-expand-or-complete}"; return; }
+  cliflow_ignored_keymap && { zle -M ""; zle "${CLIFLOW_ORIG_TAB:-expand-or-complete}"; return; }
   if [[ ${#CLIFLOW_NAMES[@]} -gt 0 ]]; then
     local idx=$((CLIFLOW_SELECTED + 1))
     local selected="${CLIFLOW_NAMES[$idx]}"
@@ -215,7 +228,7 @@ cliflow_accept() {
 
 # Space key - accept if menu showing, otherwise insert space and update
 cliflow_space() {
-  if [[ "$KEYMAP" == "isearch" ]]; then
+  if cliflow_ignored_keymap; then
     zle .self-insert
     return
   fi
@@ -283,7 +296,9 @@ CLIFLOW_ORIG_TAB=$(bindkey '^I' | awk '{print $2}')
 
 # Bind keys
 bindkey '^I' cliflow_accept       # Tab accepts
-bindkey ' ' cliflow_space         # Space accepts or inserts
+if [[ "$CLIFLOW_ACCEPT_SPACE" == "1" ]]; then
+  bindkey ' ' cliflow_space         # Space accepts or inserts
+fi
 bindkey '^[[A' cliflow_up         # Up arrow
 bindkey '^[[B' cliflow_down       # Down arrow
 bindkey '^M' cliflow_accept_line  # Enter
