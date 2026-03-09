@@ -1,6 +1,6 @@
 {
   "name": "cliflow",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "IDE-style terminal autocompletion for 800+ CLI tools. Privacy-first, offline, open-source alternative to Fig.io",
   "main": "./build/index.js",
   "type": "module",
