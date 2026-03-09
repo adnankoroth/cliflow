@@ -1,7 +1,30 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import chalk from 'chalk';
+// import chalk from 'chalk';
+// Simple ANSI color implementation to avoid dependency
+const colors = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  gray: '\x1b[90m',
+};
+
+const chalk = {
+  bold: (s: string) => `${colors.bold}${s}${colors.reset}`,
+  gray: (s: string) => `${colors.gray}${s}${colors.reset}`,
+  green: (s: string) => `${colors.green}${s}${colors.reset}`,
+  yellow: (s: string) => `${colors.yellow}${s}${colors.reset}`,
+  red: (s: string) => `${colors.red}${s}${colors.reset}`,
+  blue: (s: string) => `${colors.blue}${s}${colors.reset}`,
+  cyan: (s: string) => `${colors.cyan}${s}${colors.reset}`,
+};
 import { createConnection } from 'net';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -29,11 +52,11 @@ program
   .option('-p, --position <pos>', 'Cursor position', (val) => parseInt(val), -1)
   .action(async (commandLine: string, options) => {
     const engine = new CompletionEngine();
-    
+
     // Don't filter out empty tokens - they're important for completion context
     const tokens = commandLine.split(' ');
     const cursorPosition = options.position === -1 ? commandLine.length : options.position;
-    
+
     const context: CompletionContext = {
       currentWorkingDirectory: options.directory,
       commandLine,
@@ -43,24 +66,24 @@ program
       shell: 'zsh', // Default to zsh for now
       isGitRepository: false, // TODO: detect git repository
     };
-    
+
     try {
       const completions = await engine.getCompletions(context);
-      
+
       if (completions.length === 0) {
         console.log(chalk.yellow('No completions found'));
         return;
       }
-      
+
       console.log(chalk.green(`Found ${completions.length} completions:\n`));
-      
+
       for (const completion of completions.slice(0, 20)) { // Limit to 20 results
         const icon = getTypeIcon(completion.type || 'custom');
         const name = chalk.bold(completion.name);
         const description = completion.description ? chalk.gray(` - ${completion.description}`) : '';
         console.log(`${icon} ${name}${description}`);
       }
-      
+
       if (completions.length > 20) {
         console.log(chalk.gray(`\n... and ${completions.length - 20} more`));
       }
@@ -75,33 +98,33 @@ program
   .action(async () => {
     console.log(chalk.blue('CLIFlow Interactive Test Mode\n'));
     console.log('Type commands to see completions. Type "exit" to quit.\n');
-    
+
     const engine = new CompletionEngine();
     const readline = await import('readline');
-    
+
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
       prompt: chalk.cyan('> ')
     });
-    
+
     rl.prompt();
-    
+
     rl.on('line', async (input) => {
       const line = input.trim();
-      
+
       if (line === 'exit') {
         rl.close();
         return;
       }
-      
+
       if (line === '') {
         rl.prompt();
         return;
       }
-      
+
       const tokens = line.split(' ');
-      
+
       const context: CompletionContext = {
         currentWorkingDirectory: process.cwd(),
         commandLine: line,
@@ -111,22 +134,22 @@ program
         shell: 'zsh',
         isGitRepository: false,
       };
-      
+
       try {
         const completions = await engine.getCompletions(context);
-        
+
         if (completions.length === 0) {
           console.log(chalk.yellow('  No completions found'));
         } else {
           console.log(chalk.green(`  ${completions.length} completions:`));
-          
+
           for (const completion of completions.slice(0, 10)) {
             const icon = getTypeIcon(completion.type || 'custom');
             const name = chalk.bold(completion.name);
             const description = completion.description ? chalk.gray(` - ${completion.description}`) : '';
             console.log(`  ${icon} ${name}${description}`);
           }
-          
+
           if (completions.length > 10) {
             console.log(chalk.gray(`  ... and ${completions.length - 10} more`));
           }
@@ -134,11 +157,11 @@ program
       } catch (error) {
         console.error(chalk.red('  Error:'), error);
       }
-      
+
       console.log();
       rl.prompt();
     });
-    
+
     rl.on('close', () => {
       console.log(chalk.blue('\nGoodbye!'));
       process.exit(0);
@@ -168,16 +191,16 @@ function pingDaemon(): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = createConnection(SOCKET_PATH);
     socket.setTimeout(1000);
-    
+
     socket.on('connect', () => {
       socket.write('{"cmd":"ping"}\n');
     });
-    
+
     socket.on('data', () => {
       socket.end();
       resolve(true);
     });
-    
+
     socket.on('error', () => resolve(false));
     socket.on('timeout', () => {
       socket.end();
@@ -191,7 +214,7 @@ program
   .description('Check CLIFlow daemon status')
   .action(async () => {
     console.log(chalk.bold('\n  CLIFlow Status\n'));
-    
+
     // Check installation
     if (existsSync(CLIFLOW_HOME)) {
       console.log(`  ${chalk.green('✓')} Installation: ${chalk.gray(CLIFLOW_HOME)}`);
@@ -199,7 +222,7 @@ program
       console.log(`  ${chalk.red('✗')} Installation: ${chalk.red('Not installed')}`);
       return;
     }
-    
+
     // Check daemon
     if (isDaemonRunning()) {
       const responsive = await pingDaemon();
@@ -211,11 +234,11 @@ program
     } else {
       console.log(`  ${chalk.red('✗')} Daemon: ${chalk.red('Not running')}`);
     }
-    
+
     // Check shell integration
     const zshrc = join(homedir(), '.zshrc');
     const bashrc = join(homedir(), '.bashrc');
-    
+
     let shellIntegration = [];
     if (existsSync(zshrc) && readFileSync(zshrc, 'utf-8').includes('cliflow')) {
       shellIntegration.push('zsh');
@@ -223,13 +246,13 @@ program
     if (existsSync(bashrc) && readFileSync(bashrc, 'utf-8').includes('cliflow')) {
       shellIntegration.push('bash');
     }
-    
+
     if (shellIntegration.length > 0) {
       console.log(`  ${chalk.green('✓')} Shell integration: ${chalk.gray(shellIntegration.join(', '))}`);
     } else {
       console.log(`  ${chalk.yellow('⚠')} Shell integration: ${chalk.yellow('Not configured')}`);
     }
-    
+
     console.log();
   });
 
@@ -241,27 +264,27 @@ program
       console.log(chalk.yellow('Daemon is already running'));
       return;
     }
-    
+
     console.log('Starting CLIFlow daemon...');
-    
+
     const serverPath = join(CLIFLOW_HOME, 'build', 'daemon', 'server.js');
-    
+
     if (!existsSync(serverPath)) {
       console.error(chalk.red('Daemon script not found. Please reinstall CLIFlow.'));
       process.exit(1);
     }
-    
+
     const daemon = spawn('node', [serverPath, 'start'], {
       cwd: CLIFLOW_HOME,
       detached: true,
       stdio: 'ignore'
     });
-    
+
     daemon.unref();
-    
+
     // Wait for daemon to start
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
+
     if (await pingDaemon()) {
       console.log(chalk.green('✓ Daemon started successfully'));
     } else {
@@ -274,15 +297,15 @@ program
   .description('Stop the CLIFlow daemon')
   .action(async () => {
     console.log('Stopping CLIFlow daemon...');
-    
+
     try {
       execSync('pkill -f "cliflow.*daemon" 2>/dev/null || true', { stdio: 'ignore' });
       execSync('pkill -f "node.*server.js" 2>/dev/null || true', { stdio: 'ignore' });
-      
+
       if (existsSync(SOCKET_PATH)) {
         execSync(`rm -f "${SOCKET_PATH}"`, { stdio: 'ignore' });
       }
-      
+
       console.log(chalk.green('✓ Daemon stopped'));
     } catch {
       console.log(chalk.yellow('Could not stop daemon (may not be running)'));
@@ -294,7 +317,7 @@ program
   .description('Restart the CLIFlow daemon')
   .action(async () => {
     console.log('Restarting CLIFlow daemon...');
-    
+
     // Stop
     try {
       execSync('pkill -f "cliflow.*daemon" 2>/dev/null || true', { stdio: 'ignore' });
@@ -303,27 +326,27 @@ program
         execSync(`rm -f "${SOCKET_PATH}"`, { stdio: 'ignore' });
       }
     } catch { /* ignore */ }
-    
+
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     // Start
     const serverPath = join(CLIFLOW_HOME, 'build', 'daemon', 'server.js');
-    
+
     if (!existsSync(serverPath)) {
       console.error(chalk.red('Daemon script not found. Please reinstall CLIFlow.'));
       process.exit(1);
     }
-    
+
     const daemon = spawn('node', [serverPath, 'start'], {
       cwd: CLIFLOW_HOME,
       detached: true,
       stdio: 'ignore'
     });
-    
+
     daemon.unref();
-    
+
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
+
     if (await pingDaemon()) {
       console.log(chalk.green('✓ Daemon restarted successfully'));
     } else {
@@ -360,12 +383,12 @@ program
   .option('-n, --lines <n>', 'Number of lines to show', '50')
   .action((options) => {
     const logFile = join(CLIFLOW_HOME, 'daemon.log');
-    
+
     if (!existsSync(logFile)) {
       console.log(chalk.yellow('No log file found'));
       return;
     }
-    
+
     if (options.follow) {
       const tail = spawn('tail', ['-f', logFile], { stdio: 'inherit' });
       process.on('SIGINT', () => {
@@ -395,11 +418,11 @@ function loadConfig(): CLIFlowConfig {
     fuzzyMatch: true,
     historyEnabled: true
   };
-  
+
   if (!existsSync(CONFIG_FILE)) {
     return defaults;
   }
-  
+
   try {
     const content = readFileSync(CONFIG_FILE, 'utf-8');
     return { ...defaults, ...JSON.parse(content) };

@@ -89,7 +89,7 @@ export const cdSpec: CompletionSpec = {
   args: {
     name: 'directory',
     description: 'Directory to change to',
-    template: 'folders',  // Use built-in template for better path handling
+    template: 'folders',
     isOptional: true
   }
 };
@@ -100,6 +100,7 @@ export const mkdirSpec: CompletionSpec = {
   args: {
     name: 'directories',
     description: 'Directories to create',
+    template: 'folders',
     isVariadic: true
   },
   options: [

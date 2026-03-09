@@ -64,6 +64,7 @@ ${colors.bold}COMMANDS${colors.reset}
     --fix      Auto-fix issues
   ${colors.cyan}specs${colors.reset}        List available completion specs
   ${colors.cyan}test${colors.reset}         Test completions for a command
+  ${colors.cyan}version${colors.reset}      Show version
   ${colors.cyan}help${colors.reset}         Show this help message
 
 ${colors.bold}EXAMPLES${colors.reset}
@@ -644,6 +645,19 @@ switch (command) {
   case '-h':
     printHelp();
     break;
+  
+  case 'version':
+  case '--version':
+  case '-v': {
+    try {
+      const pkgPath = join(__dirname, '..', 'package.json');
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      console.log(`cliflow v${pkg.version}`);
+    } catch {
+      console.log('cliflow v1.0.0');
+    }
+    break;
+  }
     
   case undefined:
     printHelp();

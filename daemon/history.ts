@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, statSync, watchFile } from 'fs';
+import { readFileSync, existsSync, statSync, watch } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
@@ -35,11 +35,15 @@ export class HistoryManager {
    */
   async initialize(): Promise<void> {
     await this.parseHistory();
-    
+
     // Watch for changes (re-parse when history updates)
     if (existsSync(this.historyPath)) {
-      watchFile(this.historyPath, { interval: 30000 }, () => {
-        this.parseHistory().catch(console.error);
+      let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+      watch(this.historyPath, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          this.parseHistory().catch(console.error);
+        }, 500);
       });
     }
   }
@@ -62,15 +66,15 @@ export class HistoryManager {
 
       const content = readFileSync(this.historyPath, 'utf-8');
       const lines = content.split('\n');
-      
+
       const newFrequency = new Map<string, HistoryEntry>();
       let lineIndex = 0;
 
       for (const line of lines) {
         if (!line.trim()) continue;
-        
+
         let command = line;
-        
+
         // Handle extended history format: ": timestamp:0;command"
         if (line.startsWith(':')) {
           const match = line.match(/^:\s*\d+:\d+;(.*)$/);
@@ -87,7 +91,7 @@ export class HistoryManager {
 
         // Extract command prefix (first 1-3 tokens for matching)
         const prefixes = this.extractPrefixes(command);
-        
+
         for (const prefix of prefixes) {
           const existing = newFrequency.get(prefix);
           if (existing) {
@@ -101,7 +105,7 @@ export class HistoryManager {
             });
           }
         }
-        
+
         lineIndex++;
       }
 
@@ -122,22 +126,22 @@ export class HistoryManager {
   private extractPrefixes(command: string): string[] {
     const prefixes: string[] = [];
     const tokens = this.tokenize(command);
-    
+
     if (tokens.length === 0) return prefixes;
-    
+
     // First token (command name)
     prefixes.push(tokens[0]);
-    
+
     // First two tokens if second isn't a flag
     if (tokens.length > 1 && !tokens[1].startsWith('-')) {
       prefixes.push(`${tokens[0]} ${tokens[1]}`);
     }
-    
+
     // First three tokens for deep subcommands
     if (tokens.length > 2 && !tokens[1].startsWith('-') && !tokens[2].startsWith('-')) {
       prefixes.push(`${tokens[0]} ${tokens[1]} ${tokens[2]}`);
     }
-    
+
     return prefixes;
   }
 
@@ -209,7 +213,7 @@ export class HistoryManager {
         const frequencyScore = Math.min(entry.count, 100) / 100; // Cap at 100
         const recencyScore = entry.lastUsed / Math.max(this.stats.totalCommands, 1);
         const score = (frequencyScore * 0.7) + (recencyScore * 0.3);
-        
+
         matches.push({ entry, score });
       }
     }
@@ -220,23 +224,47 @@ export class HistoryManager {
     return matches.slice(0, limit).map(({ entry }) => {
       // Extract only the part after what's already typed
       const entryTokens = entry.command.split(/\s+/);
-      
+
       // If user typed "aws s" and entry is "aws sso", return just "sso"
       // If user typed "git" and entry is "git commit", return "commit"
       let displayName: string;
       let insertValue: string;
-      
-      if (inputTokens.length >= entryTokens.length) {
-        // User has typed same or more tokens than this entry - return full last token
+
+      if (inputTokens.length > entryTokens.length) {
+        // User has already typed more tokens than this entry
+        return null;
+      } else if (inputTokens.length === entryTokens.length) {
+        // Same number of tokens - suggest only if typed token is a strict prefix of entry token
+        const lastInput = inputTokens[inputTokens.length - 1].toLowerCase();
+        const lastEntry = entryTokens[entryTokens.length - 1].toLowerCase();
+
+        if (lastInput === lastEntry) return null;
+        if (!lastEntry.startsWith(lastInput)) return null;
+
         displayName = entryTokens[entryTokens.length - 1];
         insertValue = displayName;
       } else {
         // Return the remaining tokens after what user has typed
-        const remainingTokens = entryTokens.slice(inputTokens.length - 1);
-        displayName = remainingTokens.join(' ');
-        insertValue = remainingTokens.join(' ');
+        const lastInput = inputTokens[inputTokens.length - 1].toLowerCase();
+        const nextEntryPart = entryTokens[inputTokens.length - 1];
+
+        if (!nextEntryPart.toLowerCase().startsWith(lastInput)) return null;
+
+        // If they already typed 'cd', and the entry is 'cd ..', 
+        // we should suggest beginning at index 1.
+        if (lastInput === nextEntryPart.toLowerCase()) {
+          const subsequentTokens = entryTokens.slice(inputTokens.length);
+          if (subsequentTokens.length === 0) return null;
+          displayName = subsequentTokens.join(' ');
+          insertValue = subsequentTokens.join(' ');
+        } else {
+          // Partial match on the last token, suggest the whole last token + subsequent
+          const remainingTokens = entryTokens.slice(inputTokens.length - 1);
+          displayName = remainingTokens.join(' ');
+          insertValue = remainingTokens.join(' ');
+        }
       }
-      
+
       return {
         name: displayName,
         description: `${entry.command} (${entry.count}x)`,
@@ -245,7 +273,7 @@ export class HistoryManager {
         priority: 150 + Math.min(entry.count, 50), // High priority for history
         insertValue
       };
-    }).filter(s => s.name && s.name.length > 0);
+    }).filter((s): s is NonNullable<typeof s> => s !== null && s.name.length > 0);
   }
 
   /**
@@ -255,7 +283,7 @@ export class HistoryManager {
   getFrequencyBoost(commandPrefix: string): number {
     const entry = this.stats.commandFrequency.get(commandPrefix);
     if (!entry) return 0;
-    
+
     // Logarithmic scaling: frequent commands get a boost, but diminishing returns
     return Math.min(Math.log2(entry.count + 1) * 5, 50);
   }

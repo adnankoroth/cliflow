@@ -19,6 +19,7 @@ interface CompletionRequest {
   cursorPosition: number;
   cwd: string;
   shell: 'zsh' | 'bash' | 'fish';
+  format?: 'json' | 'tsv';
 }
 
 interface CompletionResponse {
@@ -42,27 +43,27 @@ class CLIFlowDaemon {
   private history: HistoryManager;
   private connections: Set<Socket> = new Set();
   private specCount: number = 0;
-  
+
   constructor() {
     this.history = new HistoryManager();
   }
-  
+
   async start(): Promise<void> {
     // Ensure config directory exists
     if (!existsSync(CONFIG_DIR)) {
       mkdirSync(CONFIG_DIR, { recursive: true });
     }
-    
+
     // Initialize history manager
     await this.history.initialize();
     const historyStats = this.history.getStats();
     console.log(`✓ Loaded shell history (${historyStats.totalCommands} commands, ${historyStats.uniquePrefixes} unique)`);
-    
+
     // Remove stale socket file
     if (existsSync(SOCKET_PATH)) {
       unlinkSync(SOCKET_PATH);
     }
-    
+
     // Load completion engine (relative path from build/daemon/ to build/engine/)
     try {
       // @ts-ignore - Dynamic import resolved at runtime after main build
@@ -78,44 +79,48 @@ class CLIFlowDaemon {
       console.log('Make sure to run: npm run build');
       process.exit(1);
     }
-    
+
     // Create Unix socket server
     this.server = createServer((socket) => {
       this.handleConnection(socket);
     });
-    
+
     this.server.listen(SOCKET_PATH, () => {
       console.log(`✓ CLIFlow daemon listening on ${SOCKET_PATH}`);
       console.log('  Ready for completions!');
     });
-    
+
     this.server.on('error', (err) => {
       console.error('Server error:', err);
     });
-    
+
     // Handle shutdown signals
     process.on('SIGINT', () => this.shutdown());
     process.on('SIGTERM', () => this.shutdown());
   }
-  
+
   private handleConnection(socket: Socket): void {
     this.connections.add(socket);
     let buffer = '';
-    
+
     socket.on('data', async (data) => {
       buffer += data.toString();
-      
+
       // Messages are newline-delimited JSON
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
-      
+
       for (const line of lines) {
         if (!line.trim()) continue;
-        
+
         try {
           const request: CompletionRequest = JSON.parse(line);
           const response = await this.handleRequest(request);
-          socket.write(JSON.stringify(response) + '\n');
+          if (request.format === 'tsv') {
+            socket.write(this.formatTSV(response) + '\n');
+          } else {
+            socket.write(JSON.stringify(response) + '\n');
+          }
         } catch (err) {
           const errorResponse: CompletionResponse = {
             success: false,
@@ -126,46 +131,67 @@ class CLIFlowDaemon {
         }
       }
     });
-    
+
     socket.on('close', () => {
       this.connections.delete(socket);
     });
-    
+
     socket.on('error', (err) => {
       console.error('Socket error:', err);
       this.connections.delete(socket);
     });
   }
-  
+
+  /**
+   * Format response as TSV for efficient shell parsing.
+   * Format: OK\t<count>\n followed by name\tinsertValue\ticon\tdescription lines.
+   * Error format: ERR\t<message>
+   */
+  private formatTSV(response: CompletionResponse): string {
+    if (!response.success) {
+      return `ERR\t${response.error || 'Unknown error'}`;
+    }
+    const lines = [`OK\t${response.suggestions.length}`];
+    for (const s of response.suggestions) {
+      // Escape tabs and newlines in fields to prevent parsing issues
+      const name = (s.name || '').replace(/[\t\n]/g, ' ');
+      const insertValue = (s.insertValue || s.name || '').replace(/[\t\n]/g, ' ');
+      const icon = (s.icon || '•').replace(/[\t\n]/g, ' ');
+      const description = (s.description || '').replace(/[\t\n]/g, ' ');
+      lines.push(`${name}\t${insertValue}\t${icon}\t${description}`);
+    }
+    return lines.join('\n');
+  }
+
   private async handleRequest(request: CompletionRequest): Promise<CompletionResponse> {
     switch (request.type) {
       case 'health':
         return { success: true, suggestions: [] };
-        
+
       case 'shutdown':
         setTimeout(() => this.shutdown(), 100);
         return { success: true, suggestions: [] };
-        
+
       case 'complete':
         return this.getCompletions(request);
-        
+
       default:
         return { success: false, suggestions: [], error: 'Unknown request type' };
     }
   }
-  
+
   private async getCompletions(request: CompletionRequest): Promise<CompletionResponse> {
     const { commandLine, cursorPosition, cwd } = request;
-    
+
     // Parse the command line into tokens
     const tokens = this.tokenize(commandLine.slice(0, cursorPosition));
     if (tokens.length === 0) {
       return { success: true, suggestions: [] };
     }
-    
+
     const command = tokens[0];
     const currentToken = tokens[tokens.length - 1] || '';
-    
+
     try {
       // Get completions from engine
       const context = {
@@ -177,25 +203,25 @@ class CLIFlowDaemon {
         shell: 'zsh' as const,
         isGitRepository: false,
       };
-      
+
       const suggestions = await this.engine.getCompletions(context);
-      
+
       // Add icons based on type and apply history boost
       const commandPrefix = tokens.slice(0, Math.min(tokens.length, 3)).join(' ');
       const enrichedSuggestions = suggestions.map((s: Suggestion) => {
         // Calculate history boost for this suggestion
-        const suggestionPrefix = tokens.length === 1 
-          ? s.name 
+        const suggestionPrefix = tokens.length === 1
+          ? s.name
           : `${command} ${s.name}`;
         const historyBoost = this.history.getFrequencyBoost(suggestionPrefix);
-        
+
         return {
           ...s,
           icon: s.icon || this.getIcon(s.type || 'argument'),
           priority: (s.priority || 50) + historyBoost
         };
       });
-      
+
       // Get history-based suggestions for command names (first token)
       // Don't show history when we're clearly in a file path context (token contains /)
       let historySuggestions: Suggestion[] = [];
@@ -208,13 +234,13 @@ class CLIFlowDaemon {
         const prefix = `${command} ${currentToken}`;
         historySuggestions = this.history.getHistorySuggestions(prefix, 2);
       }
-      
+
       // Combine: history first, then engine suggestions
       const allSuggestions = [...historySuggestions, ...enrichedSuggestions];
-      
+
       // Sort by priority descending
       allSuggestions.sort((a, b) => (b.priority || 0) - (a.priority || 0));
-      
+
       // Deduplicate by name
       const seen = new Set<string>();
       const uniqueSuggestions = allSuggestions.filter(s => {
@@ -222,7 +248,7 @@ class CLIFlowDaemon {
         seen.add(s.name);
         return true;
       });
-      
+
       return {
         success: true,
         suggestions: uniqueSuggestions.slice(0, 50) // Limit to 50 suggestions
@@ -236,7 +262,7 @@ class CLIFlowDaemon {
       };
     }
   }
-  
+
   private tokenize(input: string): string[] {
     // Tokenization that handles quoting and escaped spaces
     const tokens: string[] = [];
@@ -244,24 +270,24 @@ class CLIFlowDaemon {
     let inQuote = false;
     let quoteChar = '';
     let escaped = false;
-    
+
     for (let i = 0; i < input.length; i++) {
       const char = input[i];
-      
+
       if (escaped) {
         // Previous char was backslash - include this char literally
         current += char;
         escaped = false;
         continue;
       }
-      
+
       if (char === '\\') {
         // Escape character - next char is literal
         escaped = true;
         current += char; // Keep the backslash for the shell
         continue;
       }
-      
+
       if (inQuote) {
         if (char === quoteChar) {
           inQuote = false;
@@ -280,13 +306,13 @@ class CLIFlowDaemon {
         current += char;
       }
     }
-    
+
     // Don't forget the last token (even if empty - indicates new token position)
     tokens.push(current);
-    
+
     return tokens;
   }
-  
+
   private getIcon(type: string): string {
     const icons: Record<string, string> = {
       subcommand: '⚡',
@@ -303,25 +329,25 @@ class CLIFlowDaemon {
     };
     return icons[type] || icons.default;
   }
-  
+
   private shutdown(): void {
     console.log('\n🛑 Shutting down CLIFlow daemon...');
-    
+
     // Close all connections
     for (const socket of this.connections) {
       socket.destroy();
     }
-    
+
     // Close server
     if (this.server) {
       this.server.close();
     }
-    
+
     // Remove socket file
     if (existsSync(SOCKET_PATH)) {
       unlinkSync(SOCKET_PATH);
     }
-    
+
     process.exit(0);
   }
 }

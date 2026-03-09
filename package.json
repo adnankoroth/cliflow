@@ -17,8 +17,8 @@
   "homepage": "https://github.com/adnankoroth/cliflow#readme",
   "scripts": {
     "build": "tsc && npm run build:daemon && npm run build:cli && npm run sanitize:community",
-    "build:daemon": "tsc -p daemon/tsconfig.json || true",
-    "build:cli": "tsc -p bin/tsconfig.json || true",
+    "build:daemon": "tsc -p daemon/tsconfig.json",
+    "build:cli": "tsc -p bin/tsconfig.json",
     "sanitize:community": "node scripts/sanitize-community-specs.mjs",
     "report:community": "node scripts/sanitize-community-specs.mjs --report-only --sample 200",
     "build:standalone": "node scripts/build-standalone.mjs",
@@ -48,14 +48,13 @@
   "author": "CLIFlow Contributors",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/react": "^18.2.0",
-    "typescript": "^5.5.4"
+    "@types/node": "^20.19.33",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "commander": "^14.0.3",
-    "ink": "^4.4.1",
-    "react": "^18.3.1",
     "strip-json-comments": "^5.0.1",
     "yaml": "^2.4.5"
   },

@@ -12,6 +12,11 @@ if not set -q CLIFLOW_ROOT
     set -g CLIFLOW_ROOT "$HOME/.cliflow"
 end
 
+# Find cliflow-client binary
+if not set -q CLIFLOW_CLIENT
+    set -g CLIFLOW_CLIENT (status dirname)"/../bin/cliflow-client"
+end
+
 # Check if daemon is running
 function cliflow_is_running
     test -S "$CLIFLOW_SOCKET"
@@ -25,9 +30,11 @@ function cliflow_request
         return 1
     end
     
-    # Use socat or nc to communicate
-    if command -sq socat
-        echo "$request" | socat - UNIX-CONNECT:"$CLIFLOW_SOCKET" 2>/dev/null
+    # Use compiled Go client (fastest), fall back to socat/nc
+    if test -x "$CLIFLOW_CLIENT"
+        $CLIFLOW_CLIENT "$request" 2>/dev/null
+    else if command -sq socat
+        echo "$request" | socat -t2 - UNIX-CONNECT:"$CLIFLOW_SOCKET" 2>/dev/null
     else if command -sq nc
         echo "$request" | nc -U "$CLIFLOW_SOCKET" 2>/dev/null
     else
@@ -45,27 +52,14 @@ function cliflow_get_completions
     set buffer (string replace -a '"' '\\"' "$buffer")
     set cwd (string replace -a '"' '\\"' "$cwd")
     
-    set -l request "{\"type\":\"complete\",\"commandLine\":\"$buffer\",\"cursorPosition\":$cursor,\"cwd\":\"$cwd\",\"shell\":\"fish\"}"
+    set -l request "{\"type\":\"complete\",\"commandLine\":\"$buffer\",\"cursorPosition\":$cursor,\"cwd\":\"$cwd\",\"shell\":\"fish\",\"format\":\"tsv\"}"
     
     cliflow_request "$request"
 end
 
-# Parse names from JSON response
-function cliflow_parse_names
-    set -l json $argv[1]
-    string match -rg '"name":"([^"]*)"' "$json"
-end
-
-# Parse descriptions from JSON response
-function cliflow_parse_descriptions
-    set -l json $argv[1]
-    string match -rg '"description":"([^"]*)"' "$json"
-end
-
-# Parse icons from JSON response
-function cliflow_parse_icons
-    set -l json $argv[1]
-    string match -rg '"icon":"([^"]*)"' "$json"
+# Helper: Parse TSV line
+function cliflow_parse_tsv_line
+    string split \t $argv[1]
 end
 
 # FZF-based completion
@@ -79,21 +73,29 @@ function cliflow_fzf_complete
         return 1
     end
     
-    # Parse response
-    set -l names (cliflow_parse_names "$response")
-    set -l descs (cliflow_parse_descriptions "$response")
-    set -l icons (cliflow_parse_icons "$response")
-    
-    if test (count $names) -eq 0
-        return 1
-    end
-    
     # Build items for fzf
     set -l items
-    for i in (seq (count $names))
-        set -l icon (test -n "$icons[$i]"; and echo "$icons[$i]"; or echo "•")
-        set -l name "$names[$i]"
-        set -l desc (test -n "$descs[$i]"; and echo "$descs[$i]"; or echo "")
+    set -l found_header 0
+    
+    for line in (string split \n $response)
+        if test $found_header -eq 0
+            if string match -q "OK*" "$line"
+                set found_header 1
+                continue
+            else
+                return 1
+            end
+        end
+        
+        set -l parts (string split \t -- $line)
+        set -l name $parts[1]
+        set -l insertValue $parts[2]
+        set -l icon $parts[3]
+        set -l desc $parts[4]
+        
+        if test -z "$name"; continue; end
+        
+        if test -z "$icon"; set icon "•"; end
         set -a items "$icon $name|$desc"
     end
     
@@ -141,18 +143,30 @@ function __cliflow_complete
         return
     end
     
-    # Parse response
-    set -l names (cliflow_parse_names "$response")
-    set -l descs (cliflow_parse_descriptions "$response")
-    set -l icons (cliflow_parse_icons "$response")
+    # Parse TSV response
+    set -l found_header 0
     
-    # Output completions in fish format
-    for i in (seq (count $names))
-        set -l name "$names[$i]"
-        set -l desc (test -n "$descs[$i]"; and echo "$descs[$i]"; or echo "")
-        set -l icon (test -n "$icons[$i]"; and echo "$icons[$i]"; or echo "•")
+    for line in (string split \n $response)
+        if test $found_header -eq 0
+            if string match -q "OK*" "$line"
+                set found_header 1
+                continue
+            else
+                return 1 # Error or invalid response
+            end
+        end
+        
+        set -l parts (string split \t -- $line)
+        set -l name $parts[1]
+        set -l insertValue $parts[2]
+        set -l icon $parts[3]
+        set -l desc $parts[4]
+        
+        if test -z "$name"; continue; end
+        if test -z "$icon"; set icon "•"; end
         
         # Fish completion format: value \t description
+        # We include the icon in the description for visibility
         printf '%s\t%s %s\n' "$name" "$icon" "$desc"
     end
 end

@@ -8,23 +8,81 @@ export class CompletionEngine {
   private initialized: boolean = false;
   private communitySpecsAvailable: Set<string> = new Set();
   private dynamicSpecsAvailable: Set<string> = new Set();
-  
+
+  // Map of built-in command names to their source file
+  private builtInSpecMap: Record<string, string> = {
+    'git': 'git.js',
+    'docker': 'docker.js',
+    'npm': 'npm.js',
+    'aws': 'aws.js',
+    'kubectl': 'kubectl.js',
+    'terraform': 'terraform.js',
+    'helm': 'helm.js',
+    'docker-compose': 'docker-compose.js',
+    'cargo': 'cargo.js',
+    'go': 'go.js',
+    'pip': 'pip.js',
+    'yarn': 'yarn.js',
+    'gcloud': 'gcp.js',
+    'kubectx': 'kubectx.js',
+    'kubens': 'kubectx.js',
+    'ls': 'linux.js', 'cd': 'linux.js', 'mkdir': 'linux.js', 'rm': 'linux.js',
+    'cp': 'linux.js', 'mv': 'linux.js', 'find': 'linux.js', 'grep': 'linux.js',
+    'cat': 'linux.js', 'tail': 'linux.js', 'head': 'linux.js', 'ps': 'linux.js',
+    'kill': 'linux.js', 'chmod': 'linux.js', 'chown': 'linux.js', 'tar': 'linux.js',
+    'wget': 'linux.js', 'curl': 'linux.js', 'ssh': 'linux.js', 'scp': 'linux.js',
+    'next': 'frontend.js', 'vite': 'frontend.js', 'vue': 'frontend.js',
+    'ng': 'angular.js', 'create-react-app': 'frontend.js', 'nuxt': 'frontend.js',
+    'storybook': 'frontend.js',
+    'psql': 'database.js', 'mysql': 'database.js', 'mongosh': 'database.js',
+    'redis-cli': 'database.js', 'sqlite3': 'database.js', 'prisma': 'database.js',
+    'az': 'azure.js',
+    'gh': 'gh.js',
+    'aliyun': 'cloud.js', 'tailscale': 'cloud.js',
+    'ansible': 'ansible.js', 'ansible-playbook': 'ansible.js',
+    'pulumi': 'infrastructure.js', 'serverless': 'infrastructure.js', 'sls': 'infrastructure.js',
+    'jest': 'testing.js', 'cypress': 'testing.js', 'playwright': 'testing.js',
+    'eslint': 'testing.js', 'prettier': 'testing.js', 'vitest': 'testing.js',
+    'prometheus': 'monitoring.js', 'grafana-cli': 'monitoring.js', 'datadog': 'monitoring.js',
+    'jaeger': 'monitoring.js', 'opentelemetry': 'monitoring.js',
+    'vault': 'vault.js',
+    'op': 'security.js', 'sops': 'security.js', 'age': 'security.js', 'gpg': 'security.js',
+    'kustomize': 'devops.js', 'skaffold': 'devops.js', 'kind': 'devops.js',
+    'minikube': 'devops.js', 'flux': 'devops.js'
+  };
+
+  // Map of special export names (defaults to commandName + 'Spec')
+  private builtInExportOverrides: Record<string, string> = {
+    'gcloud': 'gcpSpec',
+    'kubens': 'kubeNsSpec',
+    'ng': 'angularCliSpec',
+    'create-react-app': 'createReactAppSpec',
+    'sqlite3': 'sqliteSpec',
+    'aliyun': 'alibabaCloudSpec',
+    'sls': 'serverlessSpec',
+    'grafana-cli': 'grafanaCliSpec',
+    'op': 'onePasswordSpec',
+    'next': 'nextjsSpec',
+    'vue': 'vueCliSpec',
+    'az': 'azureCliSpec'
+  };
+
   constructor() {
     // Don't load specs in constructor
   }
-  
+
   async initialize() {
     if (!this.initialized) {
       // Some converted specs reference Fig helper globals (e.g. valueList, filepaths).
       // Install lightweight polyfills up-front so lazy imports don't crash.
       installFigHelpers();
-      await this.loadBuiltInSpecs();
+      // Built-in specs are now lazy-loaded on demand
       await this.loadDynamicSpecsList();
       await this.loadCommunitySpecsList();
       this.initialized = true;
     }
   }
-  
+
   /**
    * Load list of available dynamic specs from completions directory (lazy)
    */
@@ -33,10 +91,10 @@ export class CompletionEngine {
       const fs = await import('fs');
       const path = await import('path');
       const { fileURLToPath } = await import('url');
-      
+
       const __dirname = path.dirname(fileURLToPath(import.meta.url));
       const completionsDir = path.join(__dirname, '..', 'completions');
-      
+
       const walk = (dir: string, prefixParts: string[] = []) => {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
@@ -58,7 +116,7 @@ export class CompletionEngine {
           const topLevel = prefixParts.length === 0 ? baseName : null;
 
           // Skip already loaded built-in specs and certain files (top-level only)
-          if (topLevel && (this.specs.has(topLevel) || ['index', 'types'].includes(topLevel) || topLevel.startsWith('_'))) {
+          if (topLevel && (this.specs.has(topLevel) || this.builtInSpecMap[topLevel] || ['index', 'types'].includes(topLevel) || topLevel.startsWith('_'))) {
             continue;
           }
 
@@ -73,7 +131,7 @@ export class CompletionEngine {
       // Dynamic specs listing failed, that's okay
     }
   }
-  
+
   /**
    * Lazy load a dynamic spec when needed
    */
@@ -81,17 +139,17 @@ export class CompletionEngine {
     if (!this.dynamicSpecsAvailable.has(commandName)) {
       return null;
     }
-    
+
     try {
       installFigHelpers();
       const path = await import('path');
       const { fileURLToPath } = await import('url');
-      
+
       const __dirname = path.dirname(fileURLToPath(import.meta.url));
       const specPath = path.join(__dirname, '..', 'completions', `${commandName}.js`);
-      
+
       const module = await import(specPath);
-      
+
       // Find the spec export - try common patterns
       const cleanName = commandName.replace(/[^a-zA-Z0-9]/g, '');
       const specNames = [
@@ -100,7 +158,7 @@ export class CompletionEngine {
         'completionSpec',
         'default'
       ];
-      
+
       let spec = null;
       for (const name of specNames) {
         if (module[name]) {
@@ -108,7 +166,7 @@ export class CompletionEngine {
           break;
         }
       }
-      
+
       if (!spec) {
         // Try first export that looks like a spec
         const exports = Object.values(module);
@@ -119,14 +177,14 @@ export class CompletionEngine {
           }
         }
       }
-      
+
       if (spec) {
         // Cache it for future use
         this.specs.set(commandName, spec);
         this.dynamicSpecsAvailable.delete(commandName);
         return spec;
       }
-      
+
       return null;
     } catch {
       // Failed to load dynamic spec
@@ -172,7 +230,7 @@ export class CompletionEngine {
       this.mergeSpec(target, loaded);
     }
   }
-  
+
   /**
    * Get list of all available spec names
    */
@@ -184,7 +242,7 @@ export class CompletionEngine {
     ]);
     return Array.from(all).sort();
   }
-  
+
   /**
    * Load list of available community specs (lazy - doesn't load the actual specs)
    */
@@ -193,10 +251,10 @@ export class CompletionEngine {
       const fs = await import('fs');
       const path = await import('path');
       const { fileURLToPath } = await import('url');
-      
+
       const __dirname = path.dirname(fileURLToPath(import.meta.url));
       const communityDir = path.join(__dirname, '..', 'completions', 'community');
-      
+
       if (fs.existsSync(communityDir)) {
         const files = fs.readdirSync(communityDir);
         for (const file of files) {
@@ -213,7 +271,7 @@ export class CompletionEngine {
       // Community specs not available, that's okay
     }
   }
-  
+
   /**
    * Lazy load a community spec when needed
    */
@@ -221,23 +279,23 @@ export class CompletionEngine {
     if (!this.communitySpecsAvailable.has(commandName)) {
       return null;
     }
-    
+
     try {
       installFigHelpers();
       const path = await import('path');
       const { fileURLToPath } = await import('url');
-      
+
       const __dirname = path.dirname(fileURLToPath(import.meta.url));
       const specPath = path.join(__dirname, '..', 'completions', 'community', `${commandName}.mjs`);
-      
+
       const module = await import(specPath);
-      
+
       // The spec is exported as <commandName>Spec (e.g., lsSpec, gitSpec)
       const cleanName = commandName.replace(/[^a-zA-Z0-9]/g, '');
       const specName = `${cleanName}Spec`;
-      
+
       let spec = module[specName] || module.default;
-      
+
       if (!spec) {
         // Try first export
         const exports = Object.values(module);
@@ -245,14 +303,14 @@ export class CompletionEngine {
           spec = exports[0] as CompletionSpec;
         }
       }
-      
+
       if (spec) {
         // Cache it for future use
         this.specs.set(commandName, spec);
         this.communitySpecsAvailable.delete(commandName);
         return spec;
       }
-      
+
       return null;
     } catch {
       // Failed to load community spec
@@ -260,179 +318,88 @@ export class CompletionEngine {
       return null;
     }
   }
-  
-  private async loadBuiltInSpecs() {
-    // Dynamically load all completion specs
-    const { gitSpec } = await import('../completions/git.js');
-    const { dockerSpec } = await import('../completions/docker.js');
-    const { npmSpec } = await import('../completions/npm.js');
-    const { awsSpec } = await import('../completions/aws.js');
-    const { kubectlSpec } = await import('../completions/kubectl.js');
-    const { terraformSpec } = await import('../completions/terraform.js');
-    const { helmSpec } = await import('../completions/helm.js');
-    const { dockerComposeSpec } = await import('../completions/docker-compose.js');
-    const { cargoSpec } = await import('../completions/cargo.js');
-    const { goSpec } = await import('../completions/go.js');
-    const { pipSpec } = await import('../completions/pip.js');
-    const { yarnSpec } = await import('../completions/yarn.js');
-    const { gcpSpec } = await import('../completions/gcp.js');
-    const { kubectxSpec, kubeNsSpec } = await import('../completions/kubectx.js');
-    const { 
-      lsSpec, cdSpec, mkdirSpec, rmSpec, cpSpec, mvSpec, findSpec, grepSpec, 
-      catSpec, tailSpec, headSpec, psSpec, killSpec, chmodSpec, chownSpec, 
-      tarSpec, wgetSpec, curlSpec, sshSpec, scpSpec 
-    } = await import('../completions/linux.js');
-    const { 
-      nextjsSpec, viteSpec, vueCliSpec, createReactAppSpec, 
-      nuxtSpec, storybookSpec 
-    } = await import('../completions/frontend.js');
-    const { angularCliSpec } = await import('../completions/angular.js');
-    const { 
-      psqlSpec, mysqlSpec, mongoshSpec, redisCliSpec, sqliteSpec, prismaSpec 
-    } = await import('../completions/database.js');
-    const { azureCliSpec } = await import('../completions/azure.js');
-    const { 
-      alibabaCloudSpec, tailscaleSpec 
-    } = await import('../completions/cloud.js');
-    const { ghSpec } = await import('../completions/gh.js');
-    const { ansibleSpec, ansiblePlaybookSpec } = await import('../completions/ansible.js');
-    const { 
-      pulumiSpec, serverlessSpec 
-    } = await import('../completions/infrastructure.js');
-    const { 
-      jestSpec, cypressSpec, playwrightSpec, eslintSpec, prettierSpec, vitestSpec 
-    } = await import('../completions/testing.js');
-    const { 
-      prometheusSpec, grafanaCliSpec, datadogSpec, jaegerSpec, opentelemetrySpec 
-    } = await import('../completions/monitoring.js');
-    const { vaultSpec } = await import('../completions/vault.js');
-    const { 
-      onePasswordSpec, sopsSpec, ageSpec, gpgSpec 
-    } = await import('../completions/security.js');
-    const { 
-      kustomizeSpec, skaffoldSpec, kindSpec, minikubeSpec, fluxSpec 
-    } = await import('../completions/devops.js');
-    
-    this.specs.set('git', gitSpec);
-    this.specs.set('docker', dockerSpec);
-    this.specs.set('npm', npmSpec);
-    this.specs.set('aws', awsSpec);
-    this.specs.set('kubectl', kubectlSpec);
-    this.specs.set('terraform', terraformSpec);
-    this.specs.set('helm', helmSpec);
-    this.specs.set('docker-compose', dockerComposeSpec);
-    this.specs.set('cargo', cargoSpec);
-    this.specs.set('go', goSpec);
-    this.specs.set('pip', pipSpec);
-    this.specs.set('yarn', yarnSpec);
-    this.specs.set('gcloud', gcpSpec);
-    this.specs.set('kubectx', kubectxSpec);
-    this.specs.set('kubens', kubeNsSpec);
-    
-    // Linux commands
-    this.specs.set('ls', lsSpec);
-    this.specs.set('cd', cdSpec);
-    this.specs.set('mkdir', mkdirSpec);
-    this.specs.set('rm', rmSpec);
-    this.specs.set('cp', cpSpec);
-    this.specs.set('mv', mvSpec);
-    this.specs.set('find', findSpec);
-    this.specs.set('grep', grepSpec);
-    this.specs.set('cat', catSpec);
-    this.specs.set('tail', tailSpec);
-    this.specs.set('head', headSpec);
-    this.specs.set('ps', psSpec);
-    this.specs.set('kill', killSpec);
-    this.specs.set('chmod', chmodSpec);
-    this.specs.set('chown', chownSpec);
-    this.specs.set('tar', tarSpec);
-    this.specs.set('wget', wgetSpec);
-    this.specs.set('curl', curlSpec);
-    this.specs.set('ssh', sshSpec);
-    this.specs.set('scp', scpSpec);
-    
-    // Frontend framework tools
-    this.specs.set('next', nextjsSpec);
-    this.specs.set('vite', viteSpec);
-    this.specs.set('vue', vueCliSpec);
-    this.specs.set('ng', angularCliSpec);
-    this.specs.set('create-react-app', createReactAppSpec);
-    this.specs.set('nuxt', nuxtSpec);
-    this.specs.set('storybook', storybookSpec);
-    
-    // Database tools
-    this.specs.set('psql', psqlSpec);
-    this.specs.set('mysql', mysqlSpec);
-    this.specs.set('mongosh', mongoshSpec);
-    this.specs.set('redis-cli', redisCliSpec);
-    this.specs.set('sqlite3', sqliteSpec);
-    this.specs.set('prisma', prismaSpec);
-    
-    // Cloud and infrastructure tools
-    this.specs.set('az', azureCliSpec);
-    this.specs.set('gh', ghSpec);
-    this.specs.set('aliyun', alibabaCloudSpec);
-    this.specs.set('tailscale', tailscaleSpec);
-    
-    // Infrastructure automation tools
-    this.specs.set('ansible', ansibleSpec);
-    this.specs.set('ansible-playbook', ansiblePlaybookSpec);
-    this.specs.set('pulumi', pulumiSpec);
-    this.specs.set('serverless', serverlessSpec);
-    this.specs.set('sls', serverlessSpec); // Serverless alias
-    
-    // Testing and quality assurance tools
-    this.specs.set('jest', jestSpec);
-    this.specs.set('cypress', cypressSpec);
-    this.specs.set('playwright', playwrightSpec);
-    this.specs.set('eslint', eslintSpec);
-    this.specs.set('prettier', prettierSpec);
-    this.specs.set('vitest', vitestSpec);
-    
-    // Monitoring and observability tools
-    this.specs.set('prometheus', prometheusSpec);
-    this.specs.set('grafana-cli', grafanaCliSpec);
-    this.specs.set('datadog', datadogSpec);
-    this.specs.set('jaeger', jaegerSpec);
-    this.specs.set('opentelemetry', opentelemetrySpec);
-    
-    // Security and secrets management tools
-    this.specs.set('vault', vaultSpec);
-    this.specs.set('op', onePasswordSpec);
-    this.specs.set('sops', sopsSpec);
-    this.specs.set('age', ageSpec);
-    this.specs.set('gpg', gpgSpec);
-    
-    // Advanced DevOps and orchestration tools
-    this.specs.set('kustomize', kustomizeSpec);
-    this.specs.set('skaffold', skaffoldSpec);
-    this.specs.set('kind', kindSpec);
-    this.specs.set('minikube', minikubeSpec);
-    this.specs.set('flux', fluxSpec);
+
+  /**
+   * Lazy load a built-in spec when needed
+   */
+  private async loadBuiltInSpec(commandName: string): Promise<CompletionSpec | null> {
+    const fileName = this.builtInSpecMap[commandName];
+    if (!fileName) {
+      return null;
+    }
+
+    try {
+      const path = await import('path');
+      const { fileURLToPath } = await import('url');
+
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const specPath = path.join(__dirname, '..', 'completions', fileName);
+
+      const module = await import(specPath);
+
+      // Determine export name
+      let exportName = this.builtInExportOverrides[commandName];
+      if (!exportName) {
+        // Default: git -> gitSpec, docker-compose -> dockerComposeSpec
+        const camelCase = commandName.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+        exportName = `${camelCase}Spec`;
+      }
+
+      let spec = module[exportName];
+
+      if (!spec) {
+        // Fallback: search exports for matching name
+        const exports = Object.values(module);
+        for (const exp of exports) {
+          if (exp && typeof exp === 'object' && 'name' in (exp as any) && (exp as any).name === commandName) {
+            spec = exp as CompletionSpec;
+            break;
+          }
+        }
+      }
+
+      if (spec) {
+        this.specs.set(commandName, spec);
+        return spec;
+      }
+
+      return null;
+    } catch (err) {
+      console.error(`Failed to load built-in spec ${commandName}:`, err);
+      return null;
+    }
   }
-  
+
   /**
    * Register a new completion spec
    */
   registerSpec(spec: CompletionSpec) {
     this.specs.set(spec.name, spec);
   }
-  
+
   /**
    * Get completions for a given command line
    */
   async getCompletions(context: CompletionContext): Promise<Suggestion[]> {
     await this.initialize();
-    
+
     const { tokens } = context;
-    
+
     if (tokens.length === 0) {
       return this.getAvailableCommands();
     }
-    
+
     const commandName = tokens[0];
     let spec = this.specs.get(commandName);
-    
+
+    // If not found, try loading from built-in specs (lazy)
+    if (!spec) {
+      const builtInSpec = await this.loadBuiltInSpec(commandName);
+      if (builtInSpec) {
+        spec = builtInSpec;
+      }
+    }
+
     // If not found in built-in specs, try loading dynamic spec
     if (!spec) {
       const dynamicSpec = await this.loadDynamicSpec(commandName);
@@ -440,7 +407,7 @@ export class CompletionEngine {
         spec = dynamicSpec;
       }
     }
-    
+
     // If still not found, try community specs
     if (!spec) {
       const communitySpec = await this.loadCommunitySpec(commandName);
@@ -448,28 +415,28 @@ export class CompletionEngine {
         spec = communitySpec;
       }
     }
-    
+
     if (!spec) {
-      return this.getAvailableCommands().filter(cmd => 
+      return this.getAvailableCommands().filter(cmd =>
         cmd.name.startsWith(commandName)
       );
     }
-    
+
     return this.getSpecCompletions(spec, context);
   }
-  
+
   /**
    * Get total spec count (built-in + dynamic + community)
    */
   getSpecCount(): { builtin: number; dynamic: number; community: number; total: number } {
     return {
-      builtin: this.specs.size,
+      builtin: this.specs.size + Object.keys(this.builtInSpecMap).length, // approximate since some may be loaded
       dynamic: this.dynamicSpecsAvailable.size,
       community: this.communitySpecsAvailable.size,
-      total: this.specs.size + this.dynamicSpecsAvailable.size + this.communitySpecsAvailable.size
+      total: Object.keys(this.builtInSpecMap).length + this.dynamicSpecsAvailable.size + this.communitySpecsAvailable.size
     };
   }
-  
+
   /**
    * Normalize a name that might be an array (common in Fig specs)
    */
@@ -478,17 +445,36 @@ export class CompletionEngine {
     if (Array.isArray(name)) return name[0] || '';
     return String(name);
   }
-  
+
   /**
    * Get list of all available commands
    */
   private getAvailableCommands(): Suggestion[] {
-    return Array.from(this.specs.values()).map(spec => ({
+    // Include all built-in commands in the list
+    const builtInCommands = Object.keys(this.builtInSpecMap).map(name => ({
+      name,
+      description: '', // Description is inside the spec file, so unavailable until loaded
+      type: 'subcommand' as const,
+      priority: 100
+    }));
+
+    const loadedCommands = Array.from(this.specs.values()).map(spec => ({
       name: spec.name,
       description: spec.description || '',
       type: 'subcommand' as const,
       priority: 100
     }));
+
+    // Merge and deduplicate
+    const all = [...builtInCommands, ...loadedCommands];
+    const unique = new Map();
+    for (const cmd of all) {
+      if (!unique.has(cmd.name)) {
+        unique.set(cmd.name, cmd);
+      }
+    }
+
+    return Array.from(unique.values());
   }
 
   /**
@@ -564,12 +550,12 @@ export class CompletionEngine {
       target.additionalSuggestions = [...(target.additionalSuggestions || []), ...patch.additionalSuggestions];
     }
   }
-  
+
   /**
    * Get completions from a specific spec
    */
   private async getSpecCompletions(
-    spec: CompletionSpec, 
+    spec: CompletionSpec,
     context: CompletionContext
   ): Promise<Suggestion[]> {
     await this.ensureLoadSpecApplied(spec);
@@ -599,15 +585,15 @@ export class CompletionEngine {
     // Find the active subcommand first - this is crucial for proper nesting
     let activeSubcommand = null;
     let subcommandIndex = -1;
-    
+
     // For the root command, start from index 1 (skip command name)
     // For recursive calls, start from index 0 (all tokens are subcommand tokens)  
     const startIndex = tokens[0] === spec.name ? 1 : 0;
-    
+
     for (let i = startIndex; i < tokens.length; i++) {
       const token = tokens[i];
       if (token && token.length > 0 && !token.startsWith('-')) {  // Only consider non-empty, non-option tokens
-        activeSubcommand = spec.subcommands?.find(sub => 
+        activeSubcommand = spec.subcommands?.find(sub =>
           sub.name === token || sub.aliases?.includes(token)
         );
         if (activeSubcommand) {
@@ -631,8 +617,8 @@ export class CompletionEngine {
         tokens: newTokens,
         cursorPosition: newCursorPosition
       });
-      
-      
+
+
       // If we have tokens after the subcommand OR if the cursor is past the subcommand,
       // recurse into the subcommand
       if (newTokens.length > 0 || currentTokenIndex > subcommandIndex) {
@@ -643,15 +629,15 @@ export class CompletionEngine {
         });
       }
     }
-    
+
     // If we're completing the first token or have no tokens, return subcommands
     // Handle the case where we have empty tokens (user typed space after command/subcommand)
     const isRootCommand = tokens[0] === spec.name;
     const subcommandContextIndex = isRootCommand ? 1 : 0;
-    
+
     // Only enter this block for subcommand completion logic
-    if ((currentTokenIndex <= subcommandContextIndex || tokens.length === 0) || 
-        (currentTokenIndex >= 0 && currentToken === '')) {
+    if ((currentTokenIndex <= subcommandContextIndex || tokens.length === 0) ||
+      (currentTokenIndex >= 0 && currentToken === '')) {
       // When we have an empty current token, show subcommands
       if (currentToken === '' && spec.subcommands) {
         return this.getSubcommandCompletions(spec, '');
@@ -673,12 +659,12 @@ export class CompletionEngine {
     // Handle options and arguments at this level
     const suggestions: Suggestion[] = [];
     let hasPathTemplate = false;
-    
+
     // Add arguments first if we're not completing an option
     if (!currentToken.startsWith('-') && spec.args) {
       const argSuggestions = await this.getArgumentCompletions(spec.args, context);
       suggestions.push(...argSuggestions);
-      
+
       // Check if this arg has a path template (folders, files, filepaths)
       const argSpec = Array.isArray(spec.args) ? spec.args[0] : spec.args;
       if (argSpec.template) {
@@ -688,7 +674,7 @@ export class CompletionEngine {
         }
       }
     }
-    
+
     // Add options
     if (spec.options) {
       suggestions.push(...this.getOptionCompletions(spec.options, currentToken, tokens));
@@ -698,13 +684,13 @@ export class CompletionEngine {
     // The path resolution happens in getSmartPathCompletions
     return this.rankAndFilter(suggestions, hasPathTemplate ? '' : currentToken);
   }
-  
+
   /**
    * Get subcommand completions
    */
   private getSubcommandCompletions(spec: CompletionSpec, currentToken: string): Suggestion[] {
     if (!spec.subcommands) return [];
-    
+
     const suggestions = spec.subcommands
       .filter(sub => !sub.hidden)
       .map(sub => ({
@@ -713,12 +699,12 @@ export class CompletionEngine {
         type: 'subcommand' as const,
         priority: sub.priority || 100
       }));
-    
+
     // Use fuzzy matching for filtering
     if (!currentToken) return suggestions;
     return this.rankAndFilter(suggestions, currentToken);
   }
-  
+
   /**
    * Get option completions
    */
@@ -734,19 +720,33 @@ export class CompletionEngine {
           priority: opt.priority || 80
         }));
       });
-    
+
     // Use fuzzy matching for filtering
     if (!currentToken) return suggestions;
     return this.rankAndFilter(suggestions, currentToken);
   }
-  
+
   /**
    * Get argument completions
    */
   private async getArgumentCompletions(args: any, context: CompletionContext): Promise<Suggestion[]> {
-    const argSpec = Array.isArray(args) ? args[0] : args;
+    // If multiple args are defined, pick the one matching the current positional index.
+    // Count non-option tokens already provided (excluding the current partial token).
+    let argSpec: any;
+    if (Array.isArray(args) && args.length > 1) {
+      const { tokens, cursorPosition } = context;
+      const currentTokenIndex = this.getCurrentTokenIndex(tokens, cursorPosition);
+      // Count completed non-option positional tokens before the cursor
+      let positionalCount = 0;
+      for (let i = 0; i < currentTokenIndex; i++) {
+        if (tokens[i] && !tokens[i].startsWith('-')) positionalCount++;
+      }
+      argSpec = args[Math.min(positionalCount, args.length - 1)];
+    } else {
+      argSpec = Array.isArray(args) ? args[0] : args;
+    }
     const suggestions: Suggestion[] = [];
-    
+
     // Static suggestions - normalize names from Fig specs
     if (argSpec.suggestions) {
       suggestions.push(...argSpec.suggestions.map((s: any) => ({
@@ -755,7 +755,7 @@ export class CompletionEngine {
         type: s.type || 'argument' as const
       })));
     }
-    
+
     // Template-based suggestions
     if (argSpec.template) {
       const templates = Array.isArray(argSpec.template) ? argSpec.template : [argSpec.template];
@@ -763,7 +763,7 @@ export class CompletionEngine {
         suggestions.push(...await this.getTemplateCompletions(template, context));
       }
     }
-    
+
     // Generator-based suggestions
     if (argSpec.generators) {
       const generators = Array.isArray(argSpec.generators) ? argSpec.generators : [argSpec.generators];
@@ -771,19 +771,19 @@ export class CompletionEngine {
         suggestions.push(...await this.getGeneratorCompletions(generator, context));
       }
     }
-    
+
     return suggestions;
   }
-  
+
   /**
    * Get completions from templates
    */
   private async getTemplateCompletions(template: string, context: CompletionContext): Promise<Suggestion[]> {
     const { currentWorkingDirectory, tokens } = context;
-    
+
     // Get the current token (partial path being typed)
     const currentToken = tokens[tokens.length - 1] || '';
-    
+
     switch (template) {
       case 'filepaths':
         return this.getSmartPathCompletions(currentWorkingDirectory, currentToken, true, true);
@@ -795,7 +795,7 @@ export class CompletionEngine {
         return [];
     }
   }
-  
+
   /**
    * Unescape shell-escaped characters in a path (e.g., "\ " -> " ")
    */
@@ -803,7 +803,7 @@ export class CompletionEngine {
     // Remove backslash escapes: \<space> -> <space>, \\ -> \
     return inputPath.replace(/\\(.)/g, '$1');
   }
-  
+
   /**
    * Escape special characters in a path for shell (e.g., " " -> "\ ")
    */
@@ -811,27 +811,27 @@ export class CompletionEngine {
     // Escape spaces and other special shell characters
     return inputPath.replace(/ /g, '\\ ');
   }
-  
+
   /**
    * Resolve a path that may contain ~ or be relative
    */
   private resolvePath(inputPath: string, cwd: string): string {
     if (!inputPath) return cwd;
-    
+
     // First, unescape shell escaping to get the actual path
     const unescaped = this.unescapePath(inputPath);
-    
+
     // Handle home directory
     if (unescaped.startsWith('~')) {
       const home = process.env.HOME || '/';
       return unescaped.replace(/^~/, home);
     }
-    
+
     // Handle absolute paths
     if (unescaped.startsWith('/')) {
       return unescaped;
     }
-    
+
     // Handle relative paths - use simple string concatenation since we're in a sync function
     // Remove leading ./ if present
     const normalizedPath = unescaped.startsWith('./') ? unescaped.slice(2) : unescaped;
@@ -839,7 +839,7 @@ export class CompletionEngine {
     const result = cwd.endsWith('/') ? cwd + normalizedPath : cwd + '/' + normalizedPath;
     return result;
   }
-  
+
   /**
    * Smart path completion that handles partial paths
    */
@@ -851,12 +851,12 @@ export class CompletionEngine {
   ): Promise<Suggestion[]> {
     try {
       const { readdir, stat } = await import('fs/promises');
-      const { join, dirname, basename } = await import('path');
+      const { join, dirname, basename, normalize } = await import('path');
       const { existsSync } = await import('fs');
-      
+
       let targetDir: string;
       let filterPrefix: string;
-      
+
       if (!partialPath) {
         // No path typed yet - list current directory
         targetDir = cwd;
@@ -867,46 +867,46 @@ export class CompletionEngine {
         filterPrefix = '';
       } else {
         // Partial path - list parent directory and filter
-        const resolvedPath = this.resolvePath(partialPath, cwd);
+        const resolvedPath = normalize(this.resolvePath(partialPath, cwd));
         targetDir = dirname(resolvedPath);
         filterPrefix = basename(resolvedPath).toLowerCase();
       }
-      
+
       // Check if target directory exists
       if (!existsSync(targetDir)) {
         return [];
       }
-      
+
       const targetStat = await stat(targetDir).catch(() => null);
       if (!targetStat || !targetStat.isDirectory()) {
         return [];
       }
-      
+
       const entries = await readdir(targetDir);
       const suggestions: Suggestion[] = [];
-      
+
       for (const entry of entries) {
         // Skip hidden files unless user is typing a dot
         if (entry.startsWith('.') && !filterPrefix.startsWith('.') && !partialPath.includes('/.')) {
           continue;
         }
-        
+
         const fullPath = join(targetDir, entry);
         const stats = await stat(fullPath).catch(() => null);
-        
+
         if (!stats) continue;
-        
+
         const isDir = stats.isDirectory();
-        
+
         // Skip based on include settings
         if (isDir && !includeFolders) continue;
         if (!isDir && !includeFiles) continue;
-        
+
         // Apply filter if there's a partial name
         if (filterPrefix && !entry.toLowerCase().startsWith(filterPrefix)) {
           continue;
         }
-        
+
         // Determine the full suggestion value (what will be inserted)
         // Return the ACTUAL path (with real spaces) - let the shell handle escaping
         // We need to unescape the partialPath first since it may contain shell escapes
@@ -920,44 +920,44 @@ export class CompletionEngine {
           const pathPrefix = unescapedPartial.substring(0, unescapedPartial.lastIndexOf('/') + 1);
           insertValue = pathPrefix + (isDir ? entry + '/' : entry);
         }
-        
+
         suggestions.push({
           name: isDir ? entry + '/' : entry,
           insertValue: insertValue,
           description: isDir ? 'Directory' : 'File',
           icon: isDir ? '📁' : '📄',
           type: isDir ? 'folder' : 'file',
-          priority: isDir ? 90 : 85
+          priority: isDir ? 210 : 200
         });
       }
-      
+
       return suggestions;
     } catch {
       return [];
     }
   }
-  
+
   /**
    * Get file path completions (legacy - kept for compatibility)
    */
   private async getFilePathCompletions(
-    directory: string, 
-    includeFiles: boolean, 
+    directory: string,
+    includeFiles: boolean,
     includeFolders: boolean
   ): Promise<Suggestion[]> {
     try {
       const { readdir, stat } = await import('fs/promises');
       const { join } = await import('path');
-      
+
       const entries = await readdir(directory);
       const suggestions: Suggestion[] = [];
-      
+
       for (const entry of entries) {
         const fullPath = join(directory, entry);
         const stats = await stat(fullPath).catch(() => null);
-        
+
         if (!stats) continue;
-        
+
         if (stats.isDirectory() && includeFolders) {
           suggestions.push({
             name: entry + '/',
@@ -974,13 +974,13 @@ export class CompletionEngine {
           });
         }
       }
-      
+
       return suggestions;
     } catch {
       return [];
     }
   }
-  
+
   /**
    * Get completions from generators
    */
@@ -997,7 +997,7 @@ export class CompletionEngine {
               : 'unknown';
     const tokensKey = context.tokens.join('\u0000');
     const cacheKey = `gen-${scriptKey}-${context.currentWorkingDirectory}-${tokensKey}`;
-    
+
     // Check cache
     if (generator.cache !== false) {
       const cached = this.cache.get(cacheKey);
@@ -1089,7 +1089,7 @@ export class CompletionEngine {
     this.inFlightGenerators.set(cacheKey, computePromise);
     return computePromise;
   }
-  
+
   /**
    * Calculate fuzzy match score between input and target
    * Returns -1 if no match, higher score = better match
@@ -1097,38 +1097,38 @@ export class CompletionEngine {
   private fuzzyMatch(input: string, target: string): number {
     const inputLower = input.toLowerCase();
     const targetLower = target.toLowerCase();
-    
+
     // Exact match - highest score
     if (targetLower === inputLower) {
       return 10000;
     }
-    
+
     // Prefix match - very high score
     if (targetLower.startsWith(inputLower)) {
       return 5000 + (100 - target.length); // Shorter matches score higher
     }
-    
+
     // Word boundary match (e.g., "gc" matches "git-commit" at word boundaries)
     const wordBoundaryScore = this.wordBoundaryMatch(inputLower, targetLower);
     if (wordBoundaryScore > 0) {
       return 2000 + wordBoundaryScore;
     }
-    
+
     // Substring match anywhere
     if (targetLower.includes(inputLower)) {
       const index = targetLower.indexOf(inputLower);
       return 1000 - index; // Earlier matches score higher
     }
-    
+
     // Fuzzy match - characters in sequence but not necessarily consecutive
     const fuzzyScore = this.fuzzySequenceMatch(inputLower, targetLower);
     if (fuzzyScore > 0) {
       return fuzzyScore;
     }
-    
+
     return -1; // No match
   }
-  
+
   /**
    * Match at word boundaries (camelCase, kebab-case, snake_case)
    * e.g., "gc" matches "gitCommit", "git-commit", "git_commit"
@@ -1146,7 +1146,7 @@ export class CompletionEngine {
         boundaries.push(i);
       }
     }
-    
+
     // Try to match input chars to boundary chars
     let inputIdx = 0;
     let score = 0;
@@ -1157,15 +1157,15 @@ export class CompletionEngine {
         score += 10;
       }
     }
-    
+
     // All input chars matched at boundaries
     if (inputIdx === input.length) {
       return score;
     }
-    
+
     return 0;
   }
-  
+
   /**
    * Fuzzy sequence match - all input chars appear in order in target
    */
@@ -1174,7 +1174,7 @@ export class CompletionEngine {
     let lastMatchIdx = -1;
     let score = 0;
     let consecutiveBonus = 0;
-    
+
     for (let i = 0; i < target.length && inputIdx < input.length; i++) {
       if (target[i] === input[inputIdx]) {
         // Bonus for consecutive matches
@@ -1189,27 +1189,27 @@ export class CompletionEngine {
         if (lastMatchIdx >= 0) {
           score -= (i - lastMatchIdx - 1);
         }
-        
+
         lastMatchIdx = i;
         inputIdx++;
         score += 10;
       }
     }
-    
+
     // All input characters found in sequence
     if (inputIdx === input.length) {
       return Math.max(1, score + consecutiveBonus);
     }
-    
+
     return 0;
   }
-  
+
   /**
    * Rank and filter suggestions based on user input with fuzzy matching
    */
   private rankAndFilter(suggestions: Suggestion[], input: string): Suggestion[] {
     if (!input) return suggestions;
-    
+
     // Score all suggestions
     const scored = suggestions
       .map(suggestion => {
@@ -1222,52 +1222,52 @@ export class CompletionEngine {
         // Sort by score first (higher is better)
         const scoreDiff = b.score - a.score;
         if (scoreDiff !== 0) return scoreDiff;
-        
+
         // Then by priority
         const priorityDiff = (b.suggestion.priority || 0) - (a.suggestion.priority || 0);
         if (priorityDiff !== 0) return priorityDiff;
-        
+
         // Then alphabetically
         return a.suggestion.name.localeCompare(b.suggestion.name);
       });
-    
+
     return scored.map(({ suggestion }) => suggestion);
   }
-  
+
   /**
    * Determine which token the cursor is currently in
    */
   private getCurrentTokenIndex(tokens: string[], cursorPosition: number): number {
     let position = 0;
-    
+
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
       const tokenEnd = position + token.length;
-      
+
       if (cursorPosition >= position && cursorPosition <= tokenEnd) {
         return i;
       }
-      
+
       position = tokenEnd + 1; // +1 for space
     }
-    
+
     return tokens.length;
   }
-  
+
   /**
    * Clear completion cache
    */
   clearCache() {
     this.cache.clear();
   }
-  
+
   /**
    * Load specs (alias for initialize - for daemon compatibility)
    */
   async loadSpecs() {
     await this.initialize();
   }
-  
+
   /**
    * Get completions with a simplified API (for daemon use)
    */
@@ -1293,7 +1293,7 @@ export class CompletionEngine {
       shell: 'zsh',
       isGitRepository: false,
     };
-    
+
     return this.getCompletions(context);
   }
 }

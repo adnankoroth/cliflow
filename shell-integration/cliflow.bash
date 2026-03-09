@@ -4,7 +4,8 @@
 
 # Configuration
 CLIFLOW_SOCKET="${HOME}/.cliflow/cliflow.sock"
-CLIFLOW_CLIENT="${HOME}/.cliflow/client.mjs"
+CLIFLOW_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLIFLOW_CLIENT="${CLIFLOW_CLIENT:-${CLIFLOW_SCRIPT_DIR}/../bin/cliflow-client}"
 CLIFLOW_ENABLED=1
 CLIFLOW_MIN_CHARS=1
 CLIFLOW_LAST_QUERY=""
@@ -13,6 +14,7 @@ CLIFLOW_LAST_QUERY=""
 declare -a CLIFLOW_NAMES=()
 declare -a CLIFLOW_INSERT_VALUES=()
 declare -a CLIFLOW_ICONS=()
+declare -a CLIFLOW_DESCS=()
 CLIFLOW_SELECTED=0
 CLIFLOW_MENU_VISIBLE=0
 
@@ -31,7 +33,7 @@ cliflow_is_running() {
   [[ -S "$CLIFLOW_SOCKET" ]]
 }
 
-# Get completions from daemon using the Node.js client
+# Get completions from daemon using the compiled Go client
 cliflow_get_completions() {
   local buffer="$1"
   local cursor="$2"
@@ -43,17 +45,14 @@ cliflow_get_completions() {
   local escaped_cwd="${cwd//\\/\\\\}"
   escaped_cwd="${escaped_cwd//\"/\\\"}"
   
-  local request="{\"type\":\"complete\",\"commandLine\":\"${escaped_buffer}\",\"cursorPosition\":$cursor,\"cwd\":\"${escaped_cwd}\"}"
+  local request="{\"type\":\"complete\",\"commandLine\":\"${escaped_buffer}\",\"cursorPosition\":$cursor,\"cwd\":\"${escaped_cwd}\",\"format\":\"tsv\"}"
   
-  if [[ -f "$CLIFLOW_CLIENT" ]]; then
-    /usr/local/bin/node "$CLIFLOW_CLIENT" "$request" 2>/dev/null
-  else
-    # Fallback to socat/nc
-    if command -v socat &>/dev/null; then
-      echo "$request" | socat - UNIX-CONNECT:"$CLIFLOW_SOCKET" 2>/dev/null
-    elif command -v nc &>/dev/null; then
-      echo "$request" | nc -U "$CLIFLOW_SOCKET" 2>/dev/null
-    fi
+  if [[ -x "$CLIFLOW_CLIENT" ]]; then
+    "$CLIFLOW_CLIENT" "$request" 2>/dev/null
+  elif command -v socat &>/dev/null; then
+    echo "$request" | socat -t2 - UNIX-CONNECT:"$CLIFLOW_SOCKET" 2>/dev/null
+  elif command -v nc &>/dev/null; then
+    echo "$request" | nc -U "$CLIFLOW_SOCKET" 2>/dev/null
   fi
 }
 
@@ -107,14 +106,37 @@ cliflow_show_menu() {
     ((lines_printed++))
   fi
   
+  # Get terminal width for description truncation
+  local term_width=${COLUMNS:-80}
+  local desc_max=$((term_width - 30))  # Leave room for icon + name + padding
+  [[ $desc_max -lt 10 ]] && desc_max=10
+  
   for ((i=start; i<end; i++)); do
     local icon="${CLIFLOW_ICONS[$i]:-•}"
     local name="${CLIFLOW_NAMES[$i]}"
+    local desc="${CLIFLOW_DESCS[$i]}"
+    
+    # Truncate description
+    if [[ -n "$desc" && ${#desc} -gt $desc_max ]]; then
+      desc="${desc:0:$((desc_max - 1))}…"
+    fi
+    
+    # Simple right-padding for name (bash printf is easier than zsh parameter expansion)
+    local name_padded
+    printf -v name_padded "%-20s" "$name"
     
     if [[ $i -eq $selected ]]; then
-      echo -e "\n${CLIFLOW_REVERSE}▶ ${icon} ${name}${CLIFLOW_RESET}"
+      if [[ -n "$desc" ]]; then
+        echo -e "\n${CLIFLOW_REVERSE}▶ ${icon} ${name_padded} ${desc}${CLIFLOW_RESET}"
+      else
+        echo -e "\n${CLIFLOW_REVERSE}▶ ${icon} ${name}${CLIFLOW_RESET}"
+      fi
     else
-      echo -e "\n  ${icon} ${name}"
+      if [[ -n "$desc" ]]; then
+        echo -e "\n  ${icon} ${name_padded} ${desc}"
+      else
+        echo -e "\n  ${icon} ${name}"
+      fi
     fi
     ((lines_printed++))
   done
@@ -153,35 +175,41 @@ cliflow_update() {
     return
   fi
   
-  # Get completions
+  # Get completions (TSV format)
   local response
   response=$(cliflow_get_completions "$buffer" "$cursor")
   
-  if [[ -z "$response" ]] || [[ "$response" == *'"success":false'* ]]; then
+  if [[ -z "$response" ]]; then
     CLIFLOW_NAMES=()
     CLIFLOW_INSERT_VALUES=()
     CLIFLOW_ICONS=()
+    CLIFLOW_DESCS=()
     cliflow_clear_menu
     return
   fi
   
-  # Parse names, insertValues, and icons
+  # Parse TSV response
   CLIFLOW_NAMES=()
   CLIFLOW_INSERT_VALUES=()
   CLIFLOW_ICONS=()
+  CLIFLOW_DESCS=()
   
-  local name insertValue icon
-  while IFS= read -r name; do
-    [[ -n "$name" ]] && CLIFLOW_NAMES+=("$name")
-  done < <(echo "$response" | grep -oE '"name":"[^"]*"' | sed 's/"name":"//g;s/"//g')
-  
-  while IFS= read -r insertValue; do
-    [[ -n "$insertValue" ]] && CLIFLOW_INSERT_VALUES+=("$insertValue")
-  done < <(echo "$response" | grep -oE '"insertValue":"[^"]*"' | sed 's/"insertValue":"//g;s/"//g')
-  
-  while IFS= read -r icon; do
-    [[ -n "$icon" ]] && CLIFLOW_ICONS+=("$icon")
-  done < <(echo "$response" | grep -oE '"icon":"[^"]*"' | sed 's/"icon":"//g;s/"//g')
+  local first_line=1
+  while IFS=$'\t' read -r f1 f2 f3 f4; do
+    if [[ $first_line -eq 1 ]]; then
+      first_line=0
+      if [[ "$f1" != "OK" ]]; then
+        cliflow_clear_menu
+        return
+      fi
+      continue
+    fi
+    [[ -n "$f1" ]] || continue
+    CLIFLOW_NAMES+=("$f1")
+    CLIFLOW_INSERT_VALUES+=("$f2")
+    CLIFLOW_ICONS+=("$f3")
+    CLIFLOW_DESCS+=("$f4")
+  done <<< "$response"
   
   CLIFLOW_SELECTED=0
   cliflow_show_menu
