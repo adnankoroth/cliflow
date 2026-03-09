@@ -8,12 +8,14 @@ zmodload zsh/parameter 2>/dev/null
 
 CLIFLOW_SOCKET="${HOME}/.cliflow/cliflow.sock"
 # Find cliflow-client binary relative to this script (works for Homebrew and local installs)
+# Find client binary: prefer Go binary, fall back to client.mjs
 CLIFLOW_SCRIPT_DIR="${${(%):-%x}:A:h}"
-# Force local binary if it exists, otherwise use default
-if [[ -f "${CLIFLOW_SCRIPT_DIR}/../bin/cliflow-client" ]]; then
+if [[ -x "${CLIFLOW_SCRIPT_DIR}/../bin/cliflow-client" ]]; then
   CLIFLOW_CLIENT="${CLIFLOW_SCRIPT_DIR}/../bin/cliflow-client"
+elif [[ -f "${CLIFLOW_SCRIPT_DIR}/client.mjs" ]]; then
+  CLIFLOW_CLIENT="${CLIFLOW_SCRIPT_DIR}/client.mjs"
 else
-  CLIFLOW_CLIENT="${CLIFLOW_CLIENT:-${CLIFLOW_SCRIPT_DIR}/../bin/cliflow-client}"
+  CLIFLOW_CLIENT="${CLIFLOW_CLIENT:-${CLIFLOW_SCRIPT_DIR}/client.mjs}"
 fi
 CLIFLOW_ENABLED=1
 CLIFLOW_MIN_CHARS=1
