@@ -20,14 +20,28 @@ client.on('connect', () => {
 
 client.on('data', (data) => {
   buffer += data.toString();
-  // Check if we got a complete JSON response (ends with newline)
-  if (buffer.includes('\n')) {
-    const lines = buffer.split('\n');
-    for (const line of lines) {
-      if (line.trim()) {
-        console.log(line);
+  // For TSV responses, read the header "OK\t<count>" and wait until
+  // all <count> suggestion rows have arrived, then close.
+  if (buffer.startsWith('OK\t') || buffer.startsWith('ERR\t')) {
+    const lines = buffer.split('\n').filter(l => l.length > 0);
+    if (lines.length >= 1) {
+      const count = parseInt(lines[0].split('\t')[1], 10) || 0;
+      // Header + count data rows received
+      if (lines.length >= count + 1) {
+        process.stdout.write(buffer);
         client.end();
-        return;
+      }
+    }
+  } else {
+    // JSON response: single line, close immediately
+    if (buffer.includes('\n')) {
+      const lines = buffer.split('\n');
+      for (const line of lines) {
+        if (line.trim()) {
+          console.log(line);
+          client.end();
+          return;
+        }
       }
     }
   }
