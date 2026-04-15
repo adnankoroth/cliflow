@@ -17,13 +17,43 @@ elif [[ -f "${CLIFLOW_SCRIPT_DIR}/client.mjs" ]]; then
 else
   CLIFLOW_CLIENT="${CLIFLOW_CLIENT:-${CLIFLOW_SCRIPT_DIR}/client.mjs}"
 fi
-CLIFLOW_ENABLED=1
+# Auto-disable in VS Code terminals (injected commands cause lag; zle -M causes line jumps).
+# Override by setting CLIFLOW_ENABLED=1 in your shell config before sourcing this file.
+if [[ -z "${CLIFLOW_ENABLED+x}" ]]; then
+  if [[ "$TERM_PROGRAM" == "vscode" || -n "$VSCODE_GIT_IPC_HANDLE" || -n "$VSCODE_INJECTION" ]]; then
+    CLIFLOW_ENABLED=0
+  else
+    CLIFLOW_ENABLED=1
+  fi
+fi
 CLIFLOW_MIN_CHARS=1
 CLIFLOW_ACCEPT_SPACE=${CLIFLOW_ACCEPT_SPACE:-1}
 CLIFLOW_DEBOUNCE_MS=${CLIFLOW_DEBOUNCE_MS:-40}
+CLIFLOW_DEBUG=${CLIFLOW_DEBUG:-0}
+CLIFLOW_STARTUP_GRACE_MS=${CLIFLOW_STARTUP_GRACE_MS:-1200}
+
+# Completion trigger mode:
+# - 1: live updates on each keypress
+# - 0: update only on Tab (default in VS Code terminals to avoid injected-input lag)
+if [[ -z "${CLIFLOW_LIVE_UPDATES+x}" ]]; then
+  if [[ "$TERM_PROGRAM" == "vscode" || -n "$VSCODE_GIT_IPC_HANDLE" || -n "$VSCODE_INJECTION" ]]; then
+    CLIFLOW_LIVE_UPDATES=0
+  else
+    CLIFLOW_LIVE_UPDATES=1
+  fi
+fi
+
 CLIFLOW_LAST_QUERY=""
 CLIFLOW_LAST_UPDATE=0
+CLIFLOW_SUPPRESS_UNTIL_MS=0
 echo "CLIFlow Sourced"
+
+# Avoid slowing down shell/terminal startup commands (e.g. auto `source venv`).
+if [[ ${EPOCHREALTIME:-0} != 0 ]]; then
+  CLIFLOW_SUPPRESS_UNTIL_MS=$(( ${EPOCHREALTIME} * 1000 + CLIFLOW_STARTUP_GRACE_MS ))
+else
+  CLIFLOW_SUPPRESS_UNTIL_MS=$(( $(date +%s) * 1000 + CLIFLOW_STARTUP_GRACE_MS ))
+fi
 
 CLIFLOW_NAMES=()
 CLIFLOW_INSERT_VALUES=()
@@ -33,6 +63,7 @@ CLIFLOW_SELECTED=0
 
 # Debug logging
 cliflow_log() {
+  [[ "$CLIFLOW_DEBUG" == "1" ]] || return
   echo "[$(date +%T)] $*" >> /tmp/cliflow-debug.log
 }
 cliflow_log "CLIFlow client path: $CLIFLOW_CLIENT"
@@ -140,6 +171,11 @@ cliflow_show_menu() {
 cliflow_update() {
   cliflow_log "cliflow_update called. Enabled: $CLIFLOW_ENABLED"
   [[ "$CLIFLOW_ENABLED" != "1" ]] && return
+
+  # During bulk/programmatic input, many characters are queued.
+  # Skipping completion here prevents terminal lag on injected commands.
+  (( PENDING > 0 )) && return
+
   if ! cliflow_is_running; then
     cliflow_log "Daemon not running (socket check failed)"
     return
@@ -153,6 +189,11 @@ cliflow_update() {
   # Fallback if EPOCHREALTIME is somehow still 0 (e.g. integer math issue)
   if [[ $now_ms -eq 0 ]]; then
     now_ms=$(( $(date +%s) * 1000 ))
+  fi
+
+  # Skip updates for a short window after bracketed paste/programmatic inserts.
+  if (( CLIFLOW_SUPPRESS_UNTIL_MS > 0 && now_ms < CLIFLOW_SUPPRESS_UNTIL_MS )); then
+    return
   fi
 
   if (( CLIFLOW_LAST_UPDATE > 0 && now_ms - CLIFLOW_LAST_UPDATE < CLIFLOW_DEBOUNCE_MS )); then
@@ -215,12 +256,33 @@ cliflow_update() {
 cliflow_self_insert() {
   cliflow_log "cliflow_self_insert called"
   zle .self-insert
+  [[ "$CLIFLOW_LIVE_UPDATES" == "1" ]] || return
   cliflow_update
+}
+
+# Preserve fast paste/programmatic line insertion by skipping completion RPCs during paste.
+cliflow_bracketed_paste() {
+  zle .bracketed-paste
+
+  local now_ms=$(( ${EPOCHREALTIME:-0} * 1000 ))
+  if [[ $now_ms -eq 0 ]]; then
+    now_ms=$(( $(date +%s) * 1000 ))
+  fi
+  CLIFLOW_SUPPRESS_UNTIL_MS=$((now_ms + 250))
+
+  CLIFLOW_NAMES=()
+  CLIFLOW_INSERT_VALUES=()
+  CLIFLOW_ICONS=()
+  CLIFLOW_DESCS=()
+  CLIFLOW_SELECTED=0
+  CLIFLOW_LAST_QUERY=""
+  zle -M ""
 }
 
 # Wrapper for backward-delete-char
 cliflow_backward_delete() {
   zle .backward-delete-char
+  [[ "$CLIFLOW_LIVE_UPDATES" == "1" ]] || return
   cliflow_update
 }
 
@@ -271,12 +333,30 @@ cliflow_accept() {
     # If no space found, prefix is empty (we're completing the command itself)
     [[ $found_space -eq 0 ]] && prefix=""
     
-    # Build the new buffer: prefix + escaped value
-    # Don't add trailing space if it's a directory path (ends with /)
-    if [[ "$insert_raw" == */ ]]; then
-      BUFFER="${prefix}${escaped_value}"
+    # If suggestion is multi-word, always insert as a full phrase (no escaping).
+    # Also use full-phrase insert when the suggestion starts with the current prefix.
+    local insert_full_phrase=0
+    if [[ "$insert_raw" == *" "* ]]; then
+      insert_full_phrase=1
+    elif [[ -n "$prefix" && "$insert_raw" == "${prefix}"* ]]; then
+      insert_full_phrase=1
+    elif [[ "$insert_raw" == "$buffer"* ]]; then
+      insert_full_phrase=1
+    fi
+
+    # Build the new buffer and avoid trailing space for directory paths.
+    if (( insert_full_phrase )); then
+      if [[ "$insert_raw" == */ ]]; then
+        BUFFER="$insert_raw"
+      else
+        BUFFER="$insert_raw "
+      fi
     else
-      BUFFER="${prefix}${escaped_value} "
+      if [[ "$insert_raw" == */ ]]; then
+        BUFFER="${prefix}${escaped_value}"
+      else
+        BUFFER="${prefix}${escaped_value} "
+      fi
     fi
     CURSOR=${#BUFFER}
     
@@ -296,7 +376,18 @@ cliflow_accept() {
       cliflow_update
     fi
   else
-    # No CLIFlow menu - fall back to native zsh completion
+    # No menu yet.
+    # In Tab-triggered mode, fetch suggestions on first Tab press.
+    if [[ "$CLIFLOW_LIVE_UPDATES" != "1" ]]; then
+      CLIFLOW_LAST_QUERY=""
+      cliflow_update
+      if [[ ${#CLIFLOW_NAMES[@]} -gt 0 ]]; then
+        cliflow_show_menu
+        return
+      fi
+    fi
+
+    # Fall back to native zsh completion
     zle -M ""
     zle "${CLIFLOW_ORIG_TAB:-expand-or-complete}"
   fi
@@ -308,6 +399,12 @@ cliflow_space() {
     zle .self-insert
     return
   fi
+
+  if [[ "$CLIFLOW_LIVE_UPDATES" != "1" ]]; then
+    zle .self-insert
+    return
+  fi
+
   # Only accept if user has explicitly navigated the menu (moved off index 0)
   if [[ ${#CLIFLOW_NAMES[@]} -gt 0 && $CLIFLOW_SELECTED -gt 0 ]]; then
     cliflow_accept
@@ -358,6 +455,7 @@ cliflow_cancel() {
 
 # Register widgets
 zle -N self-insert cliflow_self_insert
+zle -N bracketed-paste cliflow_bracketed_paste
 zle -N cliflow_backward_delete
 zle -N cliflow_accept
 zle -N cliflow_space
