@@ -20,7 +20,11 @@ fi
 # Auto-disable in VS Code terminals (injected commands cause lag; zle -M causes line jumps).
 # Override by setting CLIFLOW_ENABLED=1 in your shell config before sourcing this file.
 if [[ -z "${CLIFLOW_ENABLED+x}" ]]; then
-  if [[ "$TERM_PROGRAM" == "vscode" || -n "$VSCODE_GIT_IPC_HANDLE" || -n "$VSCODE_INJECTION" ]]; then
+  local _cliflow_vscode=0
+  # Check known VS Code terminal env vars
+  [[ "$TERM_PROGRAM" == "vscode" ]] && _cliflow_vscode=1
+  [[ -n "${(k)parameters[(r)VSCODE_*]}" ]] && _cliflow_vscode=1
+  if (( _cliflow_vscode )); then
     CLIFLOW_ENABLED=0
   else
     CLIFLOW_ENABLED=1
